@@ -1,0 +1,62 @@
+---
+import { getCollection, render } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import ExampleCompare from '../../components/ExampleCompare.astro';
+import { CATEGORY_NAME } from '../../data/site';
+
+interface Props {
+  entry: CollectionEntry<'entries'>;
+}
+
+export async function getStaticPaths() {
+  const entries = await getCollection('entries');
+  return entries.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props as Props;
+const { Content } = await render(entry);
+const data = entry.data;
+const catName = CATEGORY_NAME[data.category] ?? data.category;
+const dateStr = data.updated.toLocaleDateString('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+---
+<Base title={data.title} crumb={catName}>
+  <div class="posting">
+    <h1>{data.title}</h1>
+    <div class="attrs">
+      <span class={`kind kind-${data.kind}`}>{data.kind}</span>
+      <span class={`st st-${data.status}`}>{data.status}</span>
+      <span>
+        <a href={`/s/${data.category}`}>{catName}</a>
+      </span>
+      {data.tags.map((tag) => (
+        <span>{tag}</span>
+      ))}
+    </div>
+    <p class="small">
+      by {data.author} · updated {dateStr} · in{' '}
+      <a href={`/s/${data.category}`}>{catName}</a>
+    </p>
+    {data.kind === 'skill' && data.install && (
+      <p>
+        install: <code>{data.install}</code>
+      </p>
+    )}
+    {data.kind === 'setting' && (data.target || data.model) && (
+      <p>
+        {[data.target, data.model].filter(Boolean).join(' · ')}
+      </p>
+    )}
+    <div class="body">
+      <Content />
+    </div>
+    {data.examples.length > 0 && (
+      <h2>examples</h2>
+    )}
+    <ExampleCompare examples={data.examples} />
+  </div>
+</Base>

@@ -1,0 +1,58 @@
+---
+interface Example {
+  prompt: string;
+  without: string;
+  with: string;
+}
+
+interface Props {
+  examples: Example[];
+}
+
+const { examples } = Astro.props;
+const uid = `ex-${Math.random().toString(36).slice(2, 9)}`;
+---
+{
+  examples.length > 0 && (
+    <div id={uid}>
+      <div class="tabs">
+        {examples.map((_, i) => (
+          <button type="button" class={i === 0 ? 'tab on' : 'tab'}>
+            example {i + 1}
+          </button>
+        ))}
+      </div>
+      {examples.map((ex, i) => (
+        <div class="example" hidden={i !== 0}>
+          <p class="small">{ex.prompt}</p>
+          <div class="compare">
+            <div class="pane">
+              <h4>without</h4>
+              <pre>{ex.without}</pre>
+            </div>
+            <div class="pane">
+              <h4>with</h4>
+              <pre>{ex.with}</pre>
+            </div>
+          </div>
+        </div>
+      ))}
+      <script define:vars={{ uid }}>
+        const root = document.getElementById(uid);
+        if (root) {
+          const tabs = root.querySelectorAll('.tab');
+          const examples = root.querySelectorAll('.example');
+          tabs.forEach((btn, i) => {
+            btn.addEventListener('click', () => {
+              tabs.forEach((b) => b.classList.remove('on'));
+              btn.classList.add('on');
+              examples.forEach((block, j) => {
+                block.hidden = i !== j;
+              });
+            });
+          });
+        }
+      </script>
+    </div>
+  )
+}

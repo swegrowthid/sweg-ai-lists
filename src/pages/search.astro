@@ -1,0 +1,98 @@
+---
+import Base from '../layouts/Base.astro';
+import EntryRows from '../components/EntryRows.astro';
+import { CATEGORIES } from '../data/site';
+import { getCollection } from 'astro:content';
+
+// The site builds to static HTML, so a query string never reaches this file at
+// runtime. Every approved entry is rendered once with data-* filter keys; the
+// inline script applies q/kind/category from the URL. Without JS the full list
+// still renders, which is the right degraded behavior for a catalog.
+const entries = (await getCollection('entries'))
+  .filter((entry) => entry.data.status === 'approved')
+  .sort((a, b) => +b.data.updated - +a.data.updated);
+
+const rows = entries.map((entry) => ({
+  url: `/entry/${entry.id}`,
+  title: entry.data.title,
+  summary: entry.data.summary,
+  category: entry.data.category,
+  author: entry.data.author,
+  display: entry.data.kind === 'setting' ? 'setting' : 'free',
+  date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+  attrs: {
+    'data-kind': entry.data.kind,
+    'data-category': entry.data.category,
+    'data-text': `${entry.data.title} ${entry.data.summary} ${entry.data.tags.join(' ')}`.toLowerCase(),
+  },
+}));
+---
+<Base title="search">
+  <h2>search</h2>
+  <form class="searchbar" method="get" action="/search">
+    <label class="inline" for="q">words</label>
+    <input type="text" id="q" name="q" />
+    <label class="inline" for="kind">kind</label>
+    <select id="kind" name="kind">
+      <option value="">any</option>
+      <option value="skill">skill</option>
+      <option value="setting">setting</option>
+    </select>
+    <label class="inline" for="category">category</label>
+    <select id="category" name="category">
+      <option value="">any</option>
+      {CATEGORIES.map((c) => <option value={c.slug}>{c.name}</option>)}
+    </select>
+    <button type="submit">search</button>
+  </form>
+
+  <p class="small" id="count">{rows.length} entries</p>
+
+  <div id="results">
+    <EntryRows rows={rows} />
+  </div>
+
+  <p class="muted" id="empty" hidden>No results.</p>
+
+  <script>
+    // Re-run on every same-document navigation so back/forward restores the
+    // filtered view instead of the unfiltered list.
+    function applyFilters() {
+      const params = new URLSearchParams(location.search);
+      const q = (params.get('q') ?? '').trim().toLowerCase();
+      const kind = params.get('kind') ?? '';
+      const category = params.get('category') ?? '';
+      const active = q || kind || category;
+
+      // Keep the form in sync when arriving via a link or a back navigation.
+      for (const [name, value] of Object.entries({ q: params.get('q') ?? '', kind, category })) {
+        const field = document.getElementById(name);
+        if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) field.value = value;
+      }
+
+      const table = document.getElementById('results');
+      const rows = table ? Array.from(table.querySelectorAll<HTMLTableRowElement>('tbody tr')) : [];
+      let shown = 0;
+      for (const row of rows) {
+        const haystack = row.getAttribute('data-text') ?? '';
+        const match =
+          (!q || haystack.includes(q)) &&
+          (!kind || row.getAttribute('data-kind') === kind) &&
+          (!category || row.getAttribute('data-category') === category);
+        if (match) shown += 1;
+        row.hidden = !match;
+      }
+
+      const count = document.getElementById('count');
+      if (count) {
+        const filterNote = active ? ` matching ${[q && `"${params.get('q')}"`, kind, category].filter(Boolean).join(' ')}` : '';
+        count.textContent = `${shown} ${shown === 1 ? 'entry' : 'entries'}${filterNote}`;
+      }
+      const empty = document.getElementById('empty');
+      if (empty) empty.hidden = shown > 0;
+    }
+
+    applyFilters();
+    document.addEventListener('astro:after-swap', applyFilters);
+  </script>
+</Base>

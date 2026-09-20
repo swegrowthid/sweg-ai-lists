@@ -1,0 +1,27 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="how it works">
+  <h2>skills vs settings</h2>
+  <p>
+    A skill is a SKILL.md package: instructions that teach an agent a
+    specific job, like triaging email or writing commit messages.
+  </p>
+  <p>
+    A setting is a reusable system prompt or agent config: a starting
+    posture you paste into your agent or model, like a strict reviewer
+    persona or a tuned model preset.
+  </p>
+  <h2>install a skill</h2>
+  <pre>npx swegai add commit-writer
+npx swegai verify commit-writer</pre>
+  <h2>use a setting</h2>
+  <pre>copy the setting text from the entry page
+paste it as your system prompt</pre>
+  <h2>review bar</h2>
+  <ul>
+    <li>human review: every entry is read by a person before it lists</li>
+    <li>evidence required: show before/after examples of it working</li>
+    <li>no spam: no keyword stuffing, no placeholder content</li>
+  </ul>
+</Base>

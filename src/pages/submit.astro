@@ -1,0 +1,30 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="post an entry">
+  <h2>post an entry</h2>
+  <p>Skills and settings are files in this repo. To add yours:</p>
+  <ol>
+    <li>Write the file at <code>src/content/entries/your-slug.md</code>.</li>
+    <li>Match the schema: frontmatter below plus your SKILL.md text or setting prompt as the body.</li>
+    <li>Open a PR against this repo.</li>
+  </ol>
+  <pre>---
+title: "my skill"
+summary: "one-line description of what it does"
+kind: skill
+category: coding
+author: "you"
+updated: 2026-09-20
+tags: ["agents"]
+status: submitted
+install: "npx my-skill"
+examples:
+  - prompt: "do the thing"
+    without: "agent output before the skill"
+    with: "agent output after the skill"
+---
+Your SKILL.md body here. Settings use target/model
+instead of install.</pre>
+  <p>Every entry passes the <a href="/help">review bar</a> before it lists.</p>
+</Base>

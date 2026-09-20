@@ -1,0 +1,76 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import EntryRows from '../components/EntryRows.astro';
+import { CATEGORIES, CATEGORY_NAME } from '../data/site';
+
+const entries = (await getCollection('entries'))
+  .filter((entry) => entry.data.status === 'approved')
+  .sort((a, b) => b.data.updated.getTime() - a.data.updated.getTime());
+
+const rows = entries.map((entry) => ({
+  url: `/entry/${entry.id}`,
+  title: entry.data.title,
+  summary: entry.data.summary,
+  category: entry.data.category,
+  author: entry.data.author,
+  display: entry.data.kind === 'setting' ? 'setting' : 'free',
+  date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+}));
+
+const skillSlugs = ['coding', 'writing', 'research', 'mcp'];
+const settingSlugs = ['prompts', 'agents', 'models'];
+const moreSlugs = CATEGORIES.map((c) => c.slug).filter(
+  (slug) => !skillSlugs.includes(slug) && !settingSlugs.includes(slug),
+);
+---
+
+<Base>
+  <div id="front">
+    <div class="col">
+      <form class="search" action="/search" method="get">
+        <input type="text" name="q" />
+        <button type="submit">&gt;</button>
+      </form>
+      <div class="box lists">
+        <h3>skills</h3>
+        <ul>
+          {
+            skillSlugs.map((slug) => (
+              <li>
+                <a href={`/s/${slug}`}>{CATEGORY_NAME[slug] ?? slug}</a>
+              </li>
+            ))
+          }
+        </ul>
+        <h3>settings</h3>
+        <ul>
+          {
+            settingSlugs.map((slug) => (
+              <li>
+                <a href={`/s/${slug}`}>{CATEGORY_NAME[slug] ?? slug}</a>
+              </li>
+            ))
+          }
+        </ul>
+        <h3>more</h3>
+        <ul>
+          {
+            moreSlugs.map((slug) => (
+              <li>
+                <a href={`/s/${slug}`}>{CATEGORY_NAME[slug] ?? slug}</a>
+              </li>
+            ))
+          }
+          <li><a href="/wanted">wanted</a></li>
+          <li><a href="/submit">submit</a></li>
+          <li><a href="/help">help</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="col" style="flex:1">
+      <h3>newest</h3>
+      <EntryRows rows={rows} />
+    </div>
+  </div>
+</Base>

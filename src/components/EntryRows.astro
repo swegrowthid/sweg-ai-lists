@@ -1,0 +1,47 @@
+---
+import { CATEGORY_NAME } from "../data/site";
+
+interface Row {
+  url: string;
+  title: string;
+  summary: string;
+  category: string;
+  /** What renders in the "who" column: the author. */
+  author: string;
+  /** What renders in the price cell: "free" or "$X". */
+  display: string;
+  /** Pre-sorted "Mon DD" text, computed once per page, not per row. */
+  date: string;
+  /** Extra attributes on the `<tr>`. The search page uses this to hang
+   *  data-kind / data-category / data-text on each row for client-side filtering. */
+  attrs?: Record<string, string>;
+}
+
+interface Props {
+  rows: Row[];
+}
+
+const { rows } = Astro.props;
+---
+<table class="rows">
+  <tbody>
+    {
+      rows.map((row) => (
+        <tr {...row.attrs}>
+          <td class="d">{row.date}</td>
+          <td>
+            <a href={row.url}>{row.title}</a>
+            <span class="muted"> - {row.summary}</span>
+          </td>
+          <td class="c">
+            <a href={`/s/${row.category}`}>{CATEGORY_NAME[row.category] ?? row.category}</a>
+          </td>
+          <td class="c">{row.author}</td>
+          <td class="p">
+            <span class="price">{row.display}</span>
+          </td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>

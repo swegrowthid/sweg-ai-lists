@@ -1,0 +1,168 @@
+/* minimalist catalog style: system sans, blue links, gray hairlines, tables, no decoration.
+   Token values are taken from the reference design: 16px body, 18px row titles,
+   14px meta, 22.4px bold serif posting title, #222 text, 980px column. */
+html { background: #fff; }
+@view-transition { navigation: auto; }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } }
+
+body {
+  margin: 0 auto;
+  padding: 10px 16px;
+  font-family: "Open Sans", Helvetica, Arial, "Liberation Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+  color: #222;
+  max-width: 980px;
+}
+a { color: #0000ee; text-decoration: none; }
+a:visited { color: #551a8b; }
+a:hover { text-decoration: underline; }
+h1, h2, h3 { font-weight: bold; margin: 14px 0 8px; }
+h1 { font-size: 22.4px; font-family: "Bitstream Vera Serif", "Times New Roman", Times, serif; }
+h2 { font-size: 18px; }
+h3 { font-size: 16px; }
+p { margin: 8px 0; }
+hr { border: 0; border-top: 1px solid #ccc; margin: 10px 0; }
+table { border-collapse: collapse; }
+td, th { padding: 4px 10px 4px 0; vertical-align: top; text-align: left; }
+th { font-weight: normal; color: #444; border-bottom: 1px solid #ccc; font-size: 14px; }
+pre, code { font-family: "Courier New", Courier, monospace; font-size: 14px; }
+pre { background: #f6f6f6; border: 1px solid #ddd; padding: 8px; overflow-x: auto; }
+pre.wrap { white-space: pre-wrap; word-break: break-word; }
+input, select, textarea, button { font: inherit; box-sizing: border-box; max-width: 100%; }
+input[type=text], input[type=email], input[type=tel], input[type=number], input[type=url], select, textarea {
+  border: 1px solid #999; padding: 4px 6px; background: #fff;
+}
+textarea { width: 100%; max-width: 640px; }
+label { display: block; margin: 8px 0 2px; }
+.small { font-size: 14px; color: #555; }
+.muted { color: #666; }
+.err { color: #b00; }
+.ok { color: #060; }
+.price { color: #060; font-weight: bold; }
+h1 .price { font-family: inherit; }
+.stats th.n, .stats td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.callout { background: #f7f7f7; }
+.box { border: 1px solid #ccc; padding: 6px 8px; margin: 8px 0; }
+.notice { border: 1px solid #ccc; background: #fafafa; padding: 6px 8px; margin: 8px 0; }
+
+/* masthead */
+#masthead { display: flex; align-items: baseline; gap: 16px; margin-bottom: 6px; }
+#masthead .logo { font-size: 22px; font-weight: bold; color: #551a8b; }
+#masthead .logo:hover { text-decoration: none; }
+#masthead .bc { color: #666; }
+#masthead .bc a { color: #0000ee; }
+#topnav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+#topnav a::before { content: "[ "; color: #666; }
+#topnav a::after { content: " ]"; color: #666; }
+#topnav .badge { color: #b00; }
+
+/* tagline (home only) */
+.tagline { margin: 4px 0 14px; font-size: 16px; color: #222; }
+
+/* front page */
+#front { display: flex; gap: 40px; flex-wrap: wrap; }
+#front .col { min-width: 240px; }
+#front .col > h3 { margin-top: 0; }
+#front ul { list-style: none; margin: 0 0 10px; padding: 0; }
+#front li { margin: 3px 0; font-size: 14.4px; }
+#front .search { margin-bottom: 14px; }
+#front .search input[type=text] { width: 200px; }
+#front .lists { padding: 10px 12px; margin: 0; }
+#front .lists h3 { margin: 0 0 6px; }
+#front .lists h3 + ul + h3 { margin-top: 14px; }
+
+/* listings */
+.rows { width: 100%; }
+.rows td { padding-top: 6px; padding-bottom: 6px; }
+.rows td:nth-child(2) a { font-size: 18px; }
+.rows .d { color: #666; white-space: nowrap; width: 7em; font-size: 14px; }
+.rows .p { white-space: nowrap; text-align: right; }
+.rows .c { color: #666; white-space: nowrap; font-size: 14px; }
+.rows tr:hover { background: #f5f5f5; }
+
+/* search */
+.searchbar { margin: 8px 0 12px; }
+.searchbar label.inline { display: inline; margin: 0; }
+.snip { color: #444; }
+.snip b { background: #fff3a8; font-weight: normal; }
+
+/* tabs: a strip of buttons over one visible block */
+.tabs { margin: 6px 0 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs .tab { background: none; border: 1px solid #ccc; padding: 3px 10px; color: #0000ee; cursor: pointer; }
+.tabs .tab.on { background: #f0f0f0; color: #222; font-weight: bold; }
+[hidden] { display: none !important; }
+
+/* examples: the same prompt answered without and with the entry */
+.example pre { white-space: pre-wrap; max-height: 420px; overflow: auto; }
+.compare { display: flex; gap: 12px; }
+.compare .pane { flex: 1 1 0; min-width: 0; }
+.compare h4 { margin: 8px 0 4px; font-size: 14px; }
+
+/* posting (detail page) */
+.posting { max-width: 720px; }
+.attrs { margin: 6px 0; }
+.attrs span { display: inline-block; border: 1px solid #ccc; background: #f7f7f7; padding: 2px 8px; margin: 0 6px 6px 0; font-size: 14px; }
+.posting .body { margin-top: 10px; }
+.posting .body img { max-width: 100%; }
+.posting .body pre { white-space: pre-wrap; }
+.posting .body table { border-collapse: collapse; }
+.posting .body td, .posting .body th { border: 1px solid #ddd; padding: 4px 8px; }
+.posting .body blockquote { border-left: 3px solid #ddd; margin: 0; padding-left: 10px; color: #555; }
+
+/* forms */
+.form { max-width: 640px; }
+.form .row { margin: 8px 0; }
+.form input[type=text], .form input[type=email], .form input[type=tel], .form input[type=url] { width: 320px; max-width: 100%; }
+.form .actions { margin-top: 12px; }
+.form .actions button { padding: 5px 14px; }
+.form .actions button.wide { width: 200px; text-align: left; }
+.inline-form { display: inline; }
+.linkbutton { background: none; border: 0; padding: 0; color: #0000ee; cursor: pointer; }
+.linkbutton:hover { text-decoration: underline; }
+
+/* kind + status chips */
+.kind { font-size: 13px; padding: 1px 6px; border: 1px solid #ccc; }
+.kind-skill { color: #551a8b; border-color: #c9b3dd; }
+.kind-setting { color: #06a; border-color: #9bd; }
+.st { font-size: 13px; padding: 1px 6px; border: 1px solid #ccc; }
+.st-draft { color: #666; }
+.st-submitted { color: #a60; border-color: #e8c98a; }
+.st-approved { color: #060; border-color: #9c9; }
+.st-rejected { color: #b00; border-color: #e99; }
+.st-delisted { color: #666; text-decoration: line-through; }
+
+footer { margin-top: 36px; padding-top: 8px; border-top: 1px solid #ccc; color: #666; font-size: 14px; }
+footer a { margin-right: 8px; }
+
+/* ---- phones: single column, stacked listing rows, no horizontal scroll ---- */
+@media (max-width: 600px) {
+  body { padding: 8px 12px; }
+  #masthead { flex-wrap: wrap; gap: 6px 12px; }
+  #front { gap: 16px; }
+  #front .col { min-width: 0; width: 100%; }
+  #front .search input[type=text] { width: calc(100% - 44px); }
+
+  /* listing tables become stacked cards: title line, then meta line */
+  .rows, .rows tbody, .rows tr, .rows td { display: block; }
+  .rows thead, .rows th, .rows .d { display: none; }
+  .rows tr { padding: 8px 0; border-bottom: 1px solid #eee; }
+  .rows td { display: inline-block; padding: 0; margin: 3px 10px 0 0; }
+  .rows td:nth-child(2) { display: block; margin: 0; }
+  .rows td.p { text-align: left; }
+
+  /* data tables scroll instead of squeezing */
+  table:not(.rows) { display: block; overflow-x: auto; max-width: 100%; }
+
+  /* forms fill the width */
+  .form input[type=text], .form input[type=email], .form input[type=tel], .form input[type=url], .form input[type=number], .form select { width: 100%; }
+  .form .actions button.wide { width: 100%; }
+  .searchbar select, .searchbar input[type=text] { width: 100%; margin-bottom: 6px; }
+  .attrs span { margin-bottom: 6px; }
+  pre { font-size: 12px; }
+
+  /* example comparison stacks without/with */
+  .compare { flex-direction: column; gap: 0; }
+  footer { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  footer a { margin: 0; }
+}

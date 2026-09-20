@@ -1,0 +1,38 @@
+---
+import { getCollection } from 'astro:content';
+import Base from "../../layouts/Base.astro";
+import EntryRows from "../../components/EntryRows.astro";
+import { CATEGORIES } from "../../data/site";
+
+export async function getStaticPaths() {
+  return CATEGORIES.map((c) => ({ params: { slug: c.slug }, props: { name: c.name } }));
+}
+
+const { slug } = Astro.params;
+const { name } = Astro.props;
+
+const entries = (await getCollection('entries'))
+  .filter((entry) => entry.data.status === 'approved' && entry.data.category === slug)
+  .sort((a, b) => b.data.updated.getTime() - a.data.updated.getTime());
+
+const rows = entries.map((entry) => ({
+  url: `/entry/${entry.id}`,
+  title: entry.data.title,
+  summary: entry.data.summary,
+  category: entry.data.category,
+  author: entry.data.author,
+  display: entry.data.kind === 'setting' ? 'setting' : 'free',
+  date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+}));
+---
+
+<Base title={name} crumb={name}>
+  <h3>{name}</h3>
+  {
+    rows.length > 0 ? (
+      <EntryRows rows={rows} />
+    ) : (
+      <p class="muted">No entries yet in this category.</p>
+    )
+  }
+</Base>
