@@ -2,27 +2,61 @@
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
-import { CATEGORIES, CATEGORY_NAME } from '../data/site';
+import { CATEGORIES } from '../data/site';
+import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
+import type { ApiCategory, ApiPost } from '../lib/api';
 
-const entries = (await getCollection('entries'))
-  .filter((entry) => entry.data.status === 'approved')
-  .sort((a, b) => b.data.updated.getTime() - a.data.updated.getTime());
+const entries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
 
-const rows = entries.map((entry) => ({
-  url: `/entry/${entry.id}`,
-  title: entry.data.title,
-  summary: entry.data.summary,
-  category: entry.data.category,
-  author: entry.data.author,
-  display: entry.data.kind === 'setting' ? 'setting' : 'free',
-  date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-}));
+// The API is the live catalog; the local collection is the fallback, so a build
+// against an empty or unreachable API still renders a full page.
+let apiPosts: ApiPost[] = [];
+try {
+  apiPosts = await fetchPosts();
+} catch {
+  apiPosts = [];
+}
+
+let apiCategories: ApiCategory[] = [];
+try {
+  apiCategories = await fetchCategories();
+} catch {
+  apiCategories = [];
+}
+
+// Both sources carry a timestamp until the last step; rows only keep "Mon D".
+const rows = [
+  ...entries.map((entry) => ({
+    ts: entry.data.updated.getTime(),
+    row: {
+      url: `/entry/${entry.id}`,
+      title: entry.data.title,
+      summary: entry.data.summary,
+      category: entry.data.category,
+      author: entry.data.author,
+      display: entry.data.kind === 'setting' ? 'setting' : 'free',
+      date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    },
+  })),
+  // postToRow renders postDate(post) = created_at, so sort on the same field the
+  // row shows; local rows already sort on the `updated` date they display.
+  ...apiPosts.map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
+]
+  .sort((a, b) => b.ts - a.ts)
+  .map((item) => item.row);
+
+// Sidebar is the static category list unioned with the API's, so a category
+// created in the API shows up on the next build without a code change.
+const cats: { slug: string; name: string }[] = CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }));
+for (const cat of apiCategories) {
+  if (!cats.some((c) => c.slug === cat.slug)) cats.push({ slug: cat.slug, name: cat.name });
+}
 
 const skillSlugs = ['coding', 'writing', 'research', 'mcp'];
 const settingSlugs = ['prompts', 'agents', 'models'];
-const moreSlugs = CATEGORIES.map((c) => c.slug).filter(
-  (slug) => !skillSlugs.includes(slug) && !settingSlugs.includes(slug),
-);
+const skillCats = cats.filter((c) => skillSlugs.includes(c.slug));
+const settingCats = cats.filter((c) => settingSlugs.includes(c.slug));
+const moreCats = cats.filter((c) => !skillSlugs.includes(c.slug) && !settingSlugs.includes(c.slug));
 ---
 
 <Base>
@@ -36,30 +70,24 @@ const moreSlugs = CATEGORIES.map((c) => c.slug).filter(
         <h3>skills</h3>
         <ul>
           {
-            skillSlugs.map((slug) => (
-              <li>
-                <a href={`/s/${slug}`}>{CATEGORY_NAME[slug] ?? slug}</a>
-              </li>
+            skillCats.map((c) => (
+              <li><a href={`/s/${c.slug}`}>{c.name}</a></li>
             ))
           }
         </ul>
         <h3>settings</h3>
         <ul>
           {
-            settingSlugs.map((slug) => (
-              <li>
-                <a href={`/s/${slug}`}>{CATEGORY_NAME[slug] ?? slug}</a>
-              </li>
+            settingCats.map((c) => (
+              <li><a href={`/s/${c.slug}`}>{c.name}</a></li>
             ))
           }
         </ul>
         <h3>more</h3>
         <ul>
           {
-            moreSlugs.map((slug) => (
-              <li>
-                <a href={`/s/${slug}`}>{CATEGORY_NAME[slug] ?? slug}</a>
-              </li>
+            moreCats.map((c) => (
+              <li><a href={`/s/${c.slug}`}>{c.name}</a></li>
             ))
           }
           <li><a href="/wanted">wanted</a></li>

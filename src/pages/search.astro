@@ -3,30 +3,62 @@ import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
 import { CATEGORIES } from '../data/site';
 import { getCollection } from 'astro:content';
+import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
+import type { ApiCategory, ApiPost } from '../lib/api';
+
+let apiPosts: ApiPost[] = [];
+try {
+  apiPosts = await fetchPosts();
+} catch {
+  apiPosts = [];
+}
+
+let apiCategories: ApiCategory[] = [];
+try {
+  apiCategories = await fetchCategories();
+} catch {
+  apiCategories = [];
+}
 
 // The site builds to static HTML, so a query string never reaches this file at
-// runtime. Every approved entry is rendered once with data-* filter keys; the
-// inline script applies q/kind/category from the URL. Without JS the full list
-// still renders, which is the right degraded behavior for a catalog.
-const entries = (await getCollection('entries'))
-  .filter((entry) => entry.data.status === 'approved')
-  .sort((a, b) => +b.data.updated - +a.data.updated);
+// runtime. Every approved entry and every API post is rendered once with
+// data-* filter keys; the inline script applies q/kind/category from the URL.
+// Without JS the full list still renders, which is the right degraded behavior
+// for a catalog.
+const entries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
 
-const rows = entries.map((entry) => ({
-  url: `/entry/${entry.id}`,
-  title: entry.data.title,
-  summary: entry.data.summary,
-  category: entry.data.category,
-  author: entry.data.author,
-  display: entry.data.kind === 'setting' ? 'setting' : 'free',
-  date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-  attrs: {
-    'data-kind': entry.data.kind,
-    'data-category': entry.data.category,
-    'data-text': `${entry.data.title} ${entry.data.summary} ${entry.data.tags.join(' ')}`.toLowerCase(),
-  },
-}));
+const rows = [
+  ...entries.map((entry) => ({
+    ts: +entry.data.updated,
+    row: {
+      url: `/entry/${entry.id}`,
+      title: entry.data.title,
+      summary: entry.data.summary,
+      category: entry.data.category,
+      author: entry.data.author,
+      display: entry.data.kind === 'setting' ? 'setting' : 'free',
+      date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      attrs: {
+        'data-kind': entry.data.kind,
+        'data-category': entry.data.category,
+        'data-text': `${entry.data.title} ${entry.data.summary} ${entry.data.tags.join(' ')}`.toLowerCase(),
+      },
+    },
+  })),
+  // API posts have no kind/tags, so they filter as kind "post"; postToRow already
+  // hangs data-kind, data-category (first slug) and data-text (title + summary) on
+  // them, and renders the date from created_at, which is what we sort on.
+  ...apiPosts.map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
+]
+  .sort((a, b) => b.ts - a.ts)
+  .map((item) => item.row);
+
+const catOptions: { slug: string; name: string }[] = CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }));
+for (const cat of apiCategories) {
+  if (!catOptions.some((c) => c.slug === cat.slug)) catOptions.push({ slug: cat.slug, name: cat.name });
+}
 ---
+
 <Base title="search">
   <h2>search</h2>
   <form class="searchbar" method="get" action="/search">
@@ -37,11 +69,12 @@ const rows = entries.map((entry) => ({
       <option value="">any</option>
       <option value="skill">skill</option>
       <option value="setting">setting</option>
+      <option value="post">post</option>
     </select>
     <label class="inline" for="category">category</label>
     <select id="category" name="category">
       <option value="">any</option>
-      {CATEGORIES.map((c) => <option value={c.slug}>{c.name}</option>)}
+      {catOptions.map((c) => <option value={c.slug}>{c.name}</option>)}
     </select>
     <button type="submit">search</button>
   </form>

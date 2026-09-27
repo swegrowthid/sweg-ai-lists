@@ -3,7 +3,59 @@ import Base from '../layouts/Base.astro';
 ---
 <Base title="post an entry">
   <h2>post an entry</h2>
-  <p>Skills and settings are files in this repo. To add yours:</p>
+  <p>
+    Posts go straight to the live API and appear here after the next site build. An API account
+    is created once with <code>POST /users/register</code>, then <a href="/login">log in</a>.
+  </p>
+  <form class="form" id="post-form">
+    <div class="row">
+      <label for="title">title</label>
+      <input type="text" id="title" name="title" maxlength="200" required />
+    </div>
+    <div class="row">
+      <label for="slug">slug</label>
+      <input type="text" id="slug" name="slug" maxlength="100" pattern="[a-z0-9-]+" required />
+      <p class="small">lowercase letters, digits, hyphens. unique across posts.</p>
+    </div>
+    <div class="row">
+      <label for="categories">categories</label>
+      <input type="text" id="categories" name="categories" required />
+      <p class="small">comma-separated slugs that already exist, e.g. <code>coding-agent</code>.</p>
+    </div>
+    <div class="row">
+      <label for="kind">item kind</label>
+      <select id="kind" name="kind">
+        <option value="markdown">markdown</option>
+        <option value="text">text</option>
+        <option value="link">link</option>
+        <option value="file">file</option>
+      </select>
+      <p class="small">This form posts one item; a post can hold up to 20 through the API.</p>
+    </div>
+    <div class="row" id="body-row">
+      <label for="body" id="body-label">body</label>
+      <textarea id="body" name="body" rows="10"></textarea>
+    </div>
+    <div class="row" id="url-row" hidden>
+      <label for="url">url</label>
+      <input type="text" id="url" name="url" />
+    </div>
+    <div class="row" id="filename-row" hidden>
+      <label for="filename">filename</label>
+      <input type="text" id="filename" name="filename" />
+    </div>
+    <div class="row" id="mime-row" hidden>
+      <label for="mime">mime</label>
+      <input type="text" id="mime" name="mime" value="text/markdown" />
+    </div>
+    <div class="actions">
+      <button type="submit">post</button>
+    </div>
+  </form>
+  <p class="small" id="status" hidden></p>
+  <p class="small" id="auth"></p>
+
+  <h3>or open a pull request</h3>
   <ol>
     <li>Write the file at <code>src/content/entries/your-slug.md</code>.</li>
     <li>Match the schema: frontmatter below plus your SKILL.md text or setting prompt as the body.</li>
@@ -27,4 +79,108 @@ examples:
 Your SKILL.md body here. Settings use target/model
 instead of install.</pre>
   <p>Every entry passes the <a href="/help">review bar</a> before it lists.</p>
+
+  <script>
+    import { ApiError, createPost } from '../lib/api';
+    import type { CreatePostInput, ItemKind, TokenPair } from '../lib/api';
+
+    const TOKEN_KEY = 'sweg-ai-tokens';
+
+    // Element lookups are typed here; the markup above owns these ids.
+    function byId<T extends HTMLElement>(id: string): T {
+      return document.getElementById(id) as T;
+    }
+
+    const form = byId<HTMLFormElement>('post-form');
+    const status = byId<HTMLParagraphElement>('status');
+    const auth = byId<HTMLParagraphElement>('auth');
+    const kind = byId<HTMLSelectElement>('kind');
+
+    // Tokens live in this browser only; /login writes the pair the API returned.
+    function tokens(): TokenPair | null {
+      try {
+        return JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null');
+      } catch {
+        return null;
+      }
+    }
+
+    function renderAuth() {
+      auth.innerHTML = tokens()?.access_token
+        ? 'posting as the logged-in account · <a href="/login">switch account</a>'
+        : 'not logged in — <a href="/login">log in</a> to post through the API, or use the PR route below.';
+    }
+
+    function syncKind() {
+      const value = kind.value as ItemKind;
+      byId<HTMLDivElement>('body-row').hidden = value === 'link';
+      byId<HTMLDivElement>('url-row').hidden = value !== 'link';
+      byId<HTMLDivElement>('filename-row').hidden = value !== 'file';
+      byId<HTMLDivElement>('mime-row').hidden = value !== 'file';
+      byId<HTMLLabelElement>('body-label').textContent = value === 'file' ? 'file contents' : 'body';
+    }
+
+    // Only the fields that belong to the chosen kind are sent; the API rejects extras.
+    function payload(): CreatePostInput {
+      const kindValue = kind.value as ItemKind;
+      const item: CreatePostInput['items'][number] = { kind: kindValue };
+      if (kindValue === 'link') {
+        item.url = byId<HTMLInputElement>('url').value.trim();
+      } else {
+        item.body_text = byId<HTMLTextAreaElement>('body').value;
+        if (kindValue === 'file') {
+          item.filename = byId<HTMLInputElement>('filename').value.trim();
+          const mime = byId<HTMLInputElement>('mime').value.trim();
+          if (mime) item.mime = mime;
+        }
+      }
+      return {
+        slug: byId<HTMLInputElement>('slug').value.trim(),
+        title: byId<HTMLInputElement>('title').value.trim(),
+        categories: byId<HTMLInputElement>('categories')
+          .value.split(',')
+          .map((slug) => slug.trim())
+          .filter(Boolean),
+        items: [item],
+      };
+    }
+
+    function setStatus(text: string, cls: string) {
+      status.className = cls;
+      status.textContent = text;
+      status.hidden = false;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const token = tokens()?.access_token;
+      if (!token) {
+        setStatus('not logged in — log in first.', 'small err');
+        return;
+      }
+      setStatus('posting…', 'small');
+      try {
+        const post = await createPost(payload(), token);
+        form.reset();
+        syncKind();
+        setStatus(`posted /entry/${post.slug} — it lists after the next site build.`, 'small ok');
+      } catch (error) {
+        // ApiError carries the API's text/plain reason; anything else means the request
+        // never landed (offline, or the API's CORS policy blocking this origin).
+        const expired = error instanceof ApiError && error.status === 401;
+        setStatus(
+          expired
+            ? 'session expired — log in again.'
+            : error instanceof ApiError
+              ? error.message
+              : 'could not reach the API from this page — use the PR route below.',
+          'small err',
+        );
+      }
+    });
+
+    kind.addEventListener('change', syncKind);
+    syncKind();
+    renderAuth();
+  </script>
 </Base>

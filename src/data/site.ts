@@ -35,4 +35,5 @@ export const NAV: { href: string; label: string; badge?: boolean }[] = [
   { href: '/wanted', label: 'wanted', badge: true },
   { href: '/search', label: 'search' },
   { href: '/help', label: 'how it works' },
+  { href: '/login', label: 'login' },
 ];

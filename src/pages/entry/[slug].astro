@@ -4,59 +4,138 @@ import type { CollectionEntry } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import ExampleCompare from '../../components/ExampleCompare.astro';
 import { CATEGORY_NAME } from '../../data/site';
+import { fetchPost, fetchPosts } from '../../lib/api';
+import type { ApiPost } from '../../lib/api';
 
-interface Props {
+interface LocalProps {
+  source: 'local';
   entry: CollectionEntry<'entries'>;
+}
+
+interface ApiProps {
+  source: 'api';
+  slug: string;
 }
 
 export async function getStaticPaths() {
   const entries = await getCollection('entries');
-  return entries.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+  const paths: { params: { slug: string }; props: LocalProps | ApiProps }[] = entries.map((entry) => ({
+    params: { slug: entry.id },
+    props: { source: 'local', entry },
+  }));
+
+  // API posts add their slugs; a local entry claiming the same slug wins.
+  const seen = new Set(paths.map((p) => p.params.slug));
+  try {
+    for (const post of await fetchPosts()) {
+      if (seen.has(post.slug)) continue;
+      seen.add(post.slug);
+      paths.push({ params: { slug: post.slug }, props: { source: 'api', slug: post.slug } });
+    }
+  } catch {
+    // API empty or unreachable: the local collection alone still builds the route.
+  }
+
+  return paths;
 }
 
-const { entry } = Astro.props as Props;
-const { Content } = await render(entry);
-const data = entry.data;
-const catName = CATEGORY_NAME[data.category] ?? data.category;
-const dateStr = data.updated.toLocaleDateString('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-});
+const props = Astro.props as LocalProps | ApiProps;
+
+const local = props.source === 'local' ? props.entry : null;
+const rendered = local ? await render(local) : null;
+const Content = rendered ? rendered.Content : null;
+const data = local?.data ?? null;
+const catName = data ? (CATEGORY_NAME[data.category] ?? data.category) : '';
+const dateStr = data
+  ? data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  : '';
+
+// The list endpoint omits items, so an API detail needs its own fetch. Guarded:
+// a transient failure after getStaticPaths must degrade this one page, never
+// fail the whole build.
+let apiPost: ApiPost | null = null;
+if (props.source === 'api') {
+  try {
+    apiPost = await fetchPost(props.slug);
+  } catch {
+    apiPost = null;
+  }
+}
+const apiCat = apiPost?.categories[0] ?? null;
+const apiDate = apiPost
+  ? new Date(apiPost.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  : '';
 ---
-<Base title={data.title} crumb={catName}>
-  <div class="posting">
-    <h1>{data.title}</h1>
-    <div class="attrs">
-      <span class={`kind kind-${data.kind}`}>{data.kind}</span>
-      <span class={`st st-${data.status}`}>{data.status}</span>
-      <span>
+<Base title={data ? data.title : apiPost?.title} crumb={data ? catName : (apiCat ? apiCat.name : 'post')}>
+  {data && Content ? (
+    <div class="posting">
+      <h1>{data.title}</h1>
+      <div class="attrs">
+        <span class={`kind kind-${data.kind}`}>{data.kind}</span>
+        <span class={`st st-${data.status}`}>{data.status}</span>
+        <span>
+          <a href={`/s/${data.category}`}>{catName}</a>
+        </span>
+        {data.tags.map((tag) => (
+          <span>{tag}</span>
+        ))}
+      </div>
+      <p class="small">
+        by {data.author} · updated {dateStr} · in{' '}
         <a href={`/s/${data.category}`}>{catName}</a>
-      </span>
-      {data.tags.map((tag) => (
-        <span>{tag}</span>
-      ))}
-    </div>
-    <p class="small">
-      by {data.author} · updated {dateStr} · in{' '}
-      <a href={`/s/${data.category}`}>{catName}</a>
-    </p>
-    {data.kind === 'skill' && data.install && (
-      <p>
-        install: <code>{data.install}</code>
       </p>
-    )}
-    {data.kind === 'setting' && (data.target || data.model) && (
-      <p>
-        {[data.target, data.model].filter(Boolean).join(' · ')}
-      </p>
-    )}
-    <div class="body">
-      <Content />
+      {data.kind === 'skill' && data.install && (
+        <p>
+          install: <code>{data.install}</code>
+        </p>
+      )}
+      {data.kind === 'setting' && (data.target || data.model) && (
+        <p>
+          {[data.target, data.model].filter(Boolean).join(' · ')}
+        </p>
+      )}
+      <div class="body">
+        <Content />
+      </div>
+      {data.examples.length > 0 && (
+        <h2>examples</h2>
+      )}
+      <ExampleCompare examples={data.examples} />
     </div>
-    {data.examples.length > 0 && (
-      <h2>examples</h2>
-    )}
-    <ExampleCompare examples={data.examples} />
-  </div>
+  ) : apiPost ? (
+    <div class="posting">
+      <h1>{apiPost.title}</h1>
+      <div class="attrs">
+        <span class="kind">post</span>
+        {apiPost.categories.map((cat) => (
+          <span>
+            <a href={`/s/${cat.slug}`}>{cat.name}</a>
+          </span>
+        ))}
+      </div>
+      <p class="small">updated {apiDate}</p>
+      {apiPost.items?.map((item) =>
+        item.kind === 'link' ? (
+          <p class="item-link">
+            <a href={item.url}>{item.url}</a>
+          </p>
+        ) : item.kind === 'file' ? (
+          <div>
+            <p class="item-file">
+              <span class="price">{item.filename}</span> <span class="muted">{item.mime ?? 'text/markdown'}</span>
+            </p>
+            {item.body_text && <pre class="wrap">{item.body_text}</pre>}
+          </div>
+        ) : (
+          <pre class="wrap">{item.body_text}</pre>
+        ),
+      )}
+      {!apiPost.items?.length && <p class="muted">This post has no content items yet.</p>}
+    </div>
+  ) : (
+    <div class="posting">
+      <h1>{props.source === 'api' ? props.slug : 'missing entry'}</h1>
+      <p class="muted">This post is temporarily unavailable. The API did not answer at build time.</p>
+    </div>
+  )}
 </Base>

@@ -3,27 +3,56 @@ import { getCollection } from 'astro:content';
 import Base from "../../layouts/Base.astro";
 import EntryRows from "../../components/EntryRows.astro";
 import { CATEGORIES } from "../../data/site";
+import { fetchCategories, fetchPosts, postToRow } from "../../lib/api";
+import type { ApiPost } from "../../lib/api";
 
 export async function getStaticPaths() {
-  return CATEGORIES.map((c) => ({ params: { slug: c.slug }, props: { name: c.name } }));
+  const cats: { slug: string; name: string }[] = CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }));
+  try {
+    for (const cat of await fetchCategories()) {
+      if (!cats.some((c) => c.slug === cat.slug)) cats.push({ slug: cat.slug, name: cat.name });
+    }
+  } catch {
+    // API empty or unreachable: the static categories still describe the site.
+  }
+  return cats.map((c) => ({ params: { slug: c.slug }, props: { name: c.name } }));
 }
 
 const { slug } = Astro.params;
 const { name } = Astro.props;
 
-const entries = (await getCollection('entries'))
-  .filter((entry) => entry.data.status === 'approved' && entry.data.category === slug)
-  .sort((a, b) => b.data.updated.getTime() - a.data.updated.getTime());
+let apiPosts: ApiPost[] = [];
+try {
+  apiPosts = await fetchPosts();
+} catch {
+  apiPosts = [];
+}
 
-const rows = entries.map((entry) => ({
-  url: `/entry/${entry.id}`,
-  title: entry.data.title,
-  summary: entry.data.summary,
-  category: entry.data.category,
-  author: entry.data.author,
-  display: entry.data.kind === 'setting' ? 'setting' : 'free',
-  date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-}));
+const entries = (await getCollection('entries')).filter(
+  (entry) => entry.data.status === 'approved' && entry.data.category === slug,
+);
+
+const rows = [
+  ...entries.map((entry) => ({
+    ts: entry.data.updated.getTime(),
+    row: {
+      url: `/entry/${entry.id}`,
+      title: entry.data.title,
+      summary: entry.data.summary,
+      category: entry.data.category,
+      author: entry.data.author,
+      display: entry.data.kind === 'setting' ? 'setting' : 'free',
+      date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    },
+  })),
+  // An API post belongs here when `slug` is one of its categories, not only its
+  // first; sorting uses created_at, the field postToRow renders the date from.
+  ...apiPosts
+    .filter((post) => post.categories.some((c) => c.slug === slug))
+    .map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
+]
+  .sort((a, b) => b.ts - a.ts)
+  .map((item) => item.row);
 ---
 
 <Base title={name} crumb={name}>
