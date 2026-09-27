@@ -112,9 +112,10 @@ h1 .price { font-family: inherit; }
 .notice { border: 1px solid var(--hairline); background: var(--notice-bg); padding: 6px 8px; margin: 8px 0; }
 
 /* masthead */
-#masthead { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+#masthead { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 #masthead .logo { display: inline-flex; line-height: 0; }
-#masthead .logo img { width: 76px; height: auto; border-radius: 6px; }
+#masthead .logo img { display: block; width: auto; height: 34px; border-radius: 5px; }
+#masthead .logo:hover { text-decoration: none; }
 #masthead .bc { color: var(--muted); }
 #masthead .bc a { color: var(--link); }
 #theme-toggle { margin-left: auto; }

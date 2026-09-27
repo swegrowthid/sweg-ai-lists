@@ -1,15 +1,11 @@
 ---
-import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
-import { CATEGORIES } from '../data/site';
 import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
 import type { ApiCategory, ApiPost } from '../lib/api';
 
-const entries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
-
-// The API is the live catalog; the local collection is the fallback, so a build
-// against an empty or unreachable API still renders a full page.
+// Home is pure API: no local entries, no static categories. Empty backend
+// renders empty sections; content appears when the API has data.
 let apiPosts: ApiPost[] = [];
 try {
   apiPosts = await fetchPosts();
@@ -17,46 +13,20 @@ try {
   apiPosts = [];
 }
 
-let apiCategories: ApiCategory[] = [];
+let cats: ApiCategory[] = [];
 try {
-  apiCategories = await fetchCategories();
+  cats = await fetchCategories();
 } catch {
-  apiCategories = [];
+  cats = [];
 }
-
-// Both sources carry a timestamp until the last step; rows only keep "Mon D".
-const rows = [
-  ...entries.map((entry) => ({
-    ts: entry.data.updated.getTime(),
-    row: {
-      url: `/entry/${entry.id}`,
-      title: entry.data.title,
-      summary: entry.data.summary,
-      category: entry.data.category,
-      author: entry.data.author,
-      display: entry.data.kind === 'setting' ? 'setting' : 'free',
-      date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    },
-  })),
-  // postToRow renders postDate(post) = created_at, so sort on the same field the
-  // row shows; local rows already sort on the `updated` date they display.
-  ...apiPosts.map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
-]
+// API rows only, newest first on created_at (the field postToRow renders).
+const rows = apiPosts
+  .map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) }))
   .sort((a, b) => b.ts - a.ts)
   .map((item) => item.row);
 
-// Sidebar is the static category list unioned with the API's, so a category
-// created in the API shows up on the next build without a code change.
-const cats: { slug: string; name: string }[] = CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }));
-for (const cat of apiCategories) {
-  if (!cats.some((c) => c.slug === cat.slug)) cats.push({ slug: cat.slug, name: cat.name });
-}
-
-const skillSlugs = ['coding', 'writing', 'research', 'mcp'];
-const settingSlugs = ['prompts', 'agents', 'models'];
-const skillCats = cats.filter((c) => skillSlugs.includes(c.slug));
-const settingCats = cats.filter((c) => settingSlugs.includes(c.slug));
-const moreCats = cats.filter((c) => !skillSlugs.includes(c.slug) && !settingSlugs.includes(c.slug));
+// Flat API list: the Category schema has no skills/settings discriminator,
+// so no grouping. Empty API renders no category links.
 ---
 
 <Base>
@@ -67,38 +37,19 @@ const moreCats = cats.filter((c) => !skillSlugs.includes(c.slug) && !settingSlug
         <button type="submit">&gt;</button>
       </form>
       <div class="box lists">
-        <h3>skills</h3>
         <ul>
-          {
-            skillCats.map((c) => (
-              <li><a href={`/s/${c.slug}`}>{c.name}</a></li>
-            ))
-          }
-        </ul>
-        <h3>settings</h3>
-        <ul>
-          {
-            settingCats.map((c) => (
-              <li><a href={`/s/${c.slug}`}>{c.name}</a></li>
-            ))
-          }
-        </ul>
-        <h3>more</h3>
-        <ul>
-          {
-            moreCats.map((c) => (
-              <li><a href={`/s/${c.slug}`}>{c.name}</a></li>
-            ))
-          }
+          {cats.map((c) => (
+            <li><a href={`/s/${c.slug}`}>{c.name}</a></li>
+          ))}
           <li><a href="/wanted">wanted</a></li>
-          <li><a href="/submit">submit</a></li>
+          <li><a href="/submit" data-auth="in" hidden>submit</a></li>
           <li><a href="/help">help</a></li>
         </ul>
       </div>
     </div>
     <div class="col" style="flex:1">
       <h3>newest</h3>
-      <EntryRows rows={rows} />
+      {rows.length > 0 ? <EntryRows rows={rows} /> : <p class="muted">No entries yet.</p>}
     </div>
   </div>
 </Base>

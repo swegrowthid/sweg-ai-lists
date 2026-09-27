@@ -1,0 +1,75 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="register">
+  <h2>register</h2>
+  <p>
+    No account yet? Create one here, then <a href="/login">log in</a>. Registration only
+    creates the account — logging in is what stores the token this browser posts with.
+  </p>
+  <form class="form" id="register-form">
+    <div class="row">
+      <label for="username">username</label>
+      <input type="text" id="username" name="username" autocomplete="username" minlength="3" required />
+    </div>
+    <div class="row">
+      <label for="email">email</label>
+      <input type="email" id="email" name="email" autocomplete="email" required />
+    </div>
+    <div class="row">
+      <label for="password">password</label>
+      <input type="password" id="password" name="password" autocomplete="new-password" maxlength="72" required />
+    </div>
+    <div class="actions">
+      <button type="submit">register</button>
+    </div>
+  </form>
+  <p class="small" id="status" hidden></p>
+  <p class="small">Have an account? <a href="/login">log in</a>.</p>
+
+  <script>
+    import { ApiError, login, register } from '../lib/api';
+
+    const TOKEN_KEY = 'sweg-ai-tokens';
+
+    // Element lookups are typed here; the markup above owns these ids.
+    function byId<T extends HTMLElement>(id: string): T {
+      return document.getElementById(id) as T;
+    }
+
+    const form = byId<HTMLFormElement>('register-form');
+    const status = byId<HTMLParagraphElement>('status');
+
+    function setStatus(text: string, cls: string) {
+      status.className = cls;
+      status.textContent = text;
+      status.hidden = false;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setStatus('registering…', 'small');
+      try {
+        // POST /users/register returns the public User only — no tokens.
+        // Log in right away with the same credentials so the browser holds
+        // the TokenPair that /submit posts with.
+        const username = byId<HTMLInputElement>('username').value.trim();
+        const email = byId<HTMLInputElement>('email').value.trim();
+        const password = byId<HTMLInputElement>('password').value;
+        const user = await register(username, email, password);
+        const pair = await login(user.username, password);
+        localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
+        form.reset();
+        setStatus(
+          `registered as ${user.username} and logged in — access token good for ${Math.round(pair.expires_in / 60)} minutes.`,
+          'small ok',
+        );
+      } catch (error) {
+        setStatus(
+          error instanceof ApiError ? error.message : 'could not reach the API from this page.',
+          'small err',
+        );
+      }
+    });
+  </script>
+</Base>

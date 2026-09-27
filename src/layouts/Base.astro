@@ -1,6 +1,7 @@
 ---
 import { NAV, SITE } from "../data/site";
 import '../styles/style.css';
+import logoUrl from '../assets/logo.jpeg';
 
 interface Props {
   title?: string;
@@ -24,6 +25,8 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
     <meta name="theme-color" content="#551a8b" id="theme-color" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script is:inline>
       try {
         var t = localStorage.getItem('sweg-ai-theme');
@@ -36,16 +39,19 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
   </head>
   <body>
     <div id="masthead">
-      <a class="logo" href="/" aria-label={SITE.name}><img src="/logo.jpeg" alt={SITE.name} width="120" height="113" /></a>
-      <span class="bc"><a href="/">home</a>{
-        crumb ? <Fragment> {crumb}</Fragment> : null
-      }</span>
+      <a class="logo" href="/" aria-label="home"><img src={logoUrl.src ?? logoUrl} alt={SITE.name} width="36" height="34" /></a>
+      {crumb ? <span class="bc">{crumb}</span> : null}
       <button id="theme-toggle" class="linkbutton" type="button">dark</button>
     </div>
     <div id="topnav">
       {
         NAV.map((item) => (
-          <a href={item.href} class={item.badge ? 'badge' : undefined}>
+          <a
+            href={item.href}
+            class={item.badge ? 'badge' : undefined}
+            data-auth={item.auth}
+            hidden={!!item.auth}
+          >
             {item.label}
           </a>
         ))
@@ -57,9 +63,9 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
     <footer>
       <a href="/about">about</a>
       <a href="/help">help</a>
-      <a href="/submit">submit</a>
+      <a href="/submit" data-auth="in" hidden>submit</a>
       <a href="/wanted">wanted</a>
-      <span> · © {SITE.name} {SITE.room}</span>
+      <span> · <a href="https://swegrowth.id/">swegrowth.id</a></span>
     </footer>
     <script is:inline>
       (function () {
@@ -81,6 +87,17 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
             } catch (e) {}
             paint(next);
           });
+        // Auth gate: static build cannot know login state, so gated links
+        // start hidden and reveal only when localStorage holds a token.
+        var loggedIn = false;
+        try {
+          var raw = localStorage.getItem('sweg-ai-tokens');
+          loggedIn = !!(raw && JSON.parse(raw).access_token);
+        } catch (e) {}
+        for (const el of document.querySelectorAll('[data-auth]')) {
+          const need = el.getAttribute('data-auth');
+          if (need === 'in' ? loggedIn : !loggedIn) el.removeAttribute('hidden');
+        }
       })();
     </script>
   </body>

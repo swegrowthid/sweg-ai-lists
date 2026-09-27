@@ -29,11 +29,13 @@ export const CATEGORY_NAME: Record<string, string> = Object.fromEntries(
   CATEGORIES.map((c) => [c.slug, c.name]),
 );
 
-/** Front nav. `badge: true` marks the entry that gets the red accent. */
-export const NAV: { href: string; label: string; badge?: boolean }[] = [
-  { href: '/submit', label: 'post an entry' },
+/** Front nav. `badge: true` marks the entry that gets the red accent.
+ *  `auth: "in"` renders only when logged in, `"out"` only when logged out. */
+export const NAV: { href: string; label: string; badge?: boolean; auth?: 'in' | 'out' }[] = [
+  { href: '/submit', label: 'post an entry', auth: 'in' },
   { href: '/wanted', label: 'wanted', badge: true },
   { href: '/search', label: 'search' },
   { href: '/help', label: 'how it works' },
-  { href: '/login', label: 'login' },
+  { href: '/login', label: 'login', auth: 'out' },
+  { href: '/register', label: 'register', auth: 'out' },
 ];
