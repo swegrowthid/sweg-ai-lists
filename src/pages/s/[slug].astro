@@ -23,7 +23,9 @@ const { name } = Astro.props;
 
 let apiPosts: ApiPost[] = [];
 try {
-  apiPosts = await fetchPosts();
+  // The API filters server-side (?category=); an unknown slug or a dead API
+  // yields [], and the local collection below still renders.
+  apiPosts = await fetchPosts({ category: slug });
 } catch {
   apiPosts = [];
 }
@@ -45,11 +47,9 @@ const rows = [
       date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     },
   })),
-  // An API post belongs here when `slug` is one of its categories, not only its
-  // first; sorting uses created_at, the field postToRow renders the date from.
-  ...apiPosts
-    .filter((post) => post.categories.some((c) => c.slug === slug))
-    .map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
+  // The API already filtered by `slug`; sorting uses created_at, the field
+  // postToRow renders the date from.
+  ...apiPosts.map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
 ]
   .sort((a, b) => b.ts - a.ts)
   .map((item) => item.row);

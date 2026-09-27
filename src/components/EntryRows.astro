@@ -31,7 +31,7 @@ const { rows } = Astro.props;
           <td class="d">{row.date}</td>
           <td>
             <a href={row.url}>{row.title}</a>
-            <span class="muted"> - {row.summary}</span>
+            {row.summary && row.summary !== row.title ? <span class="muted"> - {row.summary}</span> : null}
           </td>
           <td class="c">
             <a href={`/s/${row.category}`}>{CATEGORY_NAME[row.category] ?? row.category}</a>
