@@ -4,30 +4,20 @@ import Base from '../layouts/Base.astro';
 <Base title="post an entry">
   <h2>post an entry</h2>
   <p>
-    Posts go straight to the live API and appear here after the next site build. An API account
+    Posts go straight to the live API and open right away. An API account
     is created once at <a href="/register">register</a>, then <a href="/login">log in</a>.
   </p>
   <form class="form" id="post-form">
     <div class="row">
       <label for="title">title</label>
       <input type="text" id="title" name="title" maxlength="200" required />
-    </div>
-    <div class="row">
-      <label for="slug">slug</label>
-      <input type="text" id="slug" name="slug" maxlength="100" pattern="[a-z0-9-]+" placeholder="setup-claude-code" required />
-      <p class="small">the URL path of the entry: lowercase letters, digits, hyphens. e.g. <code>setup-claude-code</code>. unique across posts.</p>
+      <p class="small">the slug is generated from this - <code>my first skill</code> becomes <code>my-first-skill</code>.</p>
     </div>
     <div class="row">
       <label for="category">category</label>
       <input type="text" id="category" name="category" list="category-list" maxlength="100" required />
       <datalist id="category-list"></datalist>
-      <p class="small" id="category-hint">top-level slug, e.g. <code>coding</code>.</p>
-    </div>
-    <div class="row">
-      <label for="derivative">derivative</label>
-      <input type="text" id="derivative" name="derivative" list="derivative-list" maxlength="100" />
-      <datalist id="derivative-list"></datalist>
-      <p class="small">optional - a direct child of the category, e.g. <code>claude-code</code>.</p>
+      <p class="small" id="category-hint">any slug - top-level like <code>coding</code> or a derivative like <code>claude-code</code>.</p>
     </div>
     <div class="row">
       <label for="kind">item kind</label>
@@ -90,9 +80,8 @@ instead of install.</pre>
 
   <script>
     import { ApiError, createPost, fetchCategories } from '../lib/api';
-    import type { ApiCategory, CreatePostInput, ItemKind, TokenPair } from '../lib/api';
-
-    const TOKEN_KEY = 'sweg-ai-tokens';
+    import type { CreatePostInput, ItemKind } from '../lib/api';
+    import { ensurePair, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
@@ -104,17 +93,8 @@ instead of install.</pre>
     const auth = byId<HTMLParagraphElement>('auth');
     const kind = byId<HTMLSelectElement>('kind');
 
-    // Tokens live in this browser only; /login writes the pair the API returned.
-    function tokens(): TokenPair | null {
-      try {
-        return JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null');
-      } catch {
-        return null;
-      }
-    }
-
     function renderAuth() {
-      auth.innerHTML = tokens()?.access_token
+      auth.innerHTML = storedPair()?.access_token
         ? 'posting as the logged-in account · <a href="/login">switch account</a>'
         : 'not logged in — <a href="/login">log in</a> to post through the API, or use the PR route below.';
     }
@@ -150,45 +130,27 @@ instead of install.</pre>
           if (mime) item.mime = mime;
         }
       }
-      const derivative = byId<HTMLInputElement>('derivative').value.trim();
       return {
-        slug: byId<HTMLInputElement>('slug').value.trim(),
         title: byId<HTMLInputElement>('title').value.trim(),
         category: byId<HTMLInputElement>('category').value.trim(),
-        ...(derivative ? { derivative } : {}),
         items: [item],
       };
     }
 
-    // Category slugs come from the API; datalists keep the inputs usable when
-    // the fetch cannot run (offline, or a CORS-blocked cross-origin deploy).
-    let categories: ApiCategory[] = [];
-
-    function fill(listId: string, slugs: string[]) {
-      const list = byId<HTMLDataListElement>(listId);
-      list.replaceChildren(...slugs.map((slug) => new Option(slug, slug)));
-    }
-
-    function syncDerivatives() {
-      const parent = byId<HTMLInputElement>('category').value.trim();
-      const children = categories.filter((c) => c.parent_slug === parent).map((c) => c.slug);
-      fill('derivative-list', children);
-    }
-
+    // Category slugs come from the API; the datalist keeps the input usable
+    // when the fetch cannot run (offline, or a CORS-blocked cross-origin deploy).
     async function loadCategories() {
       const hint = byId<HTMLParagraphElement>('category-hint');
       try {
-        categories = await fetchCategories();
+        const categories = await fetchCategories();
+        const list = byId<HTMLDataListElement>('category-list');
+        // One field accepts every slug - parents and derivatives alike; the
+        // API resolves a derivative to its parent on its own.
+        list.replaceChildren(...categories.map((c) => new Option(c.slug, c.slug)));
+        hint.textContent = `${categories.length} slugs loaded - parents and derivatives accepted.`;
       } catch {
         hint.textContent = 'could not load category slugs from the API - type one that exists.';
-        return;
       }
-      fill(
-        'category-list',
-        categories.filter((c) => !c.parent_slug).map((c) => c.slug),
-      );
-      syncDerivatives();
-      hint.textContent = `${categories.length} slugs loaded - top-level in category, children in derivative.`;
     }
 
     function setStatus(text: string, cls: string) {
@@ -199,7 +161,7 @@ instead of install.</pre>
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const token = tokens()?.access_token;
+      const token = (await ensurePair())?.access_token;
       if (!token) {
         setStatus('not logged in — log in first.', 'small err');
         return;
@@ -207,9 +169,9 @@ instead of install.</pre>
       setStatus('posting…', 'small');
       try {
         const post = await createPost(payload(), token);
-        form.reset();
-        syncKind();
-        setStatus(`posted /entry/${post.slug} — it lists after the next site build.`, 'small ok');
+        // The generated slug answers immediately - detail pages render live.
+        location.href = `/entry/?s=${encodeURIComponent(post.slug)}`;
+        return;
       } catch (error) {
         // ApiError carries the API's text/plain reason; anything else means the request
         // never landed (offline, or the API's CORS policy blocking this origin).
@@ -226,7 +188,6 @@ instead of install.</pre>
     });
 
     kind.addEventListener('change', syncKind);
-    byId<HTMLInputElement>('category').addEventListener('input', syncDerivatives);
     syncKind();
     renderAuth();
     void loadCategories();

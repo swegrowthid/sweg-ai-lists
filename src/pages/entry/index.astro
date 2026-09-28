@@ -1,0 +1,29 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="post" crumb="post">
+  <div class="posting" id="detail">
+    <p class="muted">loading post…</p>
+  </div>
+  <script>
+    import { mountPostDetail } from '../../lib/postDetail';
+
+    // API-post detail lives client-side: a post created after the last site
+    // build has no prerendered /entry/<slug> file, but this page always exists.
+    const root = document.getElementById('detail') as HTMLElement;
+    const slug = new URLSearchParams(location.search).get('s') ?? '';
+    if (slug) {
+      void mountPostDetail(root, slug);
+    } else {
+      root.textContent = '';
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.textContent = 'no post selected - ';
+      const a = document.createElement('a');
+      a.href = '/';
+      a.textContent = 'browse the list';
+      p.append(a, '.');
+      root.append(p);
+    }
+  </script>
+</Base>

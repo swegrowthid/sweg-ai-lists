@@ -42,56 +42,12 @@ import Base from '../layouts/Base.astro';
   </div>
 
   <script>
-    import { ApiError, fetchUsers, logout, refresh } from '../lib/api';
-    import type { TokenPair } from '../lib/api';
-
-    const TOKEN_KEY = 'sweg-ai-tokens';
+    import { ApiError, fetchUsers, logout } from '../lib/api';
+    import { claims, clearPair, ensurePair, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
       return document.getElementById(id) as T;
-    }
-
-    interface Claims {
-      /** User id (uuid) - matches User.id from GET /users. */
-      sub?: string;
-      username?: string;
-      exp?: number;
-    }
-
-    function storedPair(): TokenPair | null {
-      try {
-        return JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null');
-      } catch {
-        return null;
-      }
-    }
-
-    /** The access token is a JWT whose payload carries `sub` and `username`. */
-    function claims(token: string): Claims | null {
-      try {
-        const body = token.split('.')[1];
-        return JSON.parse(atob(body.replace(/-/g, '+').replace(/_/g, '/')));
-      } catch {
-        return null;
-      }
-    }
-
-    /** A live pair, or null. A dead access token gets one silent refresh -
-     *  the refresh token is what keeps the session, not the access token. */
-    async function ensurePair(): Promise<TokenPair | null> {
-      const pair = storedPair();
-      if (!pair?.access_token) return null;
-      const c = claims(pair.access_token);
-      if (c?.exp && c.exp * 1000 > Date.now()) return pair;
-      if (!pair.refresh_token) return null;
-      try {
-        const fresh = await refresh(pair.refresh_token);
-        localStorage.setItem(TOKEN_KEY, JSON.stringify(fresh));
-        return fresh;
-      } catch {
-        return null;
-      }
     }
 
     async function main() {
@@ -115,7 +71,7 @@ import Base from '../layouts/Base.astro';
       byId<HTMLButtonElement>('logout').addEventListener('click', () => {
         // Revoke the refresh token server-side; failure still logs out locally.
         if (pair.refresh_token) void logout(pair.refresh_token).catch(() => {});
-        localStorage.removeItem(TOKEN_KEY);
+        clearPair();
         location.href = '/login';
       });
 
@@ -130,7 +86,7 @@ import Base from '../layouts/Base.astro';
           : since.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          localStorage.removeItem(TOKEN_KEY);
+          clearPair();
           card.hidden = true;
           byId<HTMLParagraphElement>('expired').hidden = false;
           return;

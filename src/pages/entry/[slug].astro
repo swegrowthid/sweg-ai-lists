@@ -4,8 +4,7 @@ import type { CollectionEntry } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import ExampleCompare from '../../components/ExampleCompare.astro';
 import { CATEGORY_NAME } from '../../data/site';
-import { fetchPost, fetchPosts } from '../../lib/api';
-import type { ApiPost } from '../../lib/api';
+import { fetchPosts } from '../../lib/api';
 
 interface LocalProps {
   source: 'local';
@@ -50,23 +49,11 @@ const dateStr = data
   ? data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   : '';
 
-// The list endpoint omits items, so an API detail needs its own fetch. Guarded:
-// a transient failure after getStaticPaths must degrade this one page, never
-// fail the whole build.
-let apiPost: ApiPost | null = null;
-if (props.source === 'api') {
-  try {
-    apiPost = await fetchPost(props.slug);
-  } catch {
-    apiPost = null;
-  }
-}
-const apiCat = apiPost?.categories[0] ?? null;
-const apiDate = apiPost
-  ? new Date(apiPost.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  : '';
+// API posts render client-side (see entry/index.astro + lib/postDetail.ts):
+// the shell ships at build time, the post body hydrates in the browser, so
+// the page always shows live data and can offer the owner a delete action.
 ---
-<Base title={data ? data.title : apiPost?.title} crumb={data ? catName : (apiCat ? apiCat.name : 'post')}>
+<Base title={data ? data.title : 'post'} crumb={data ? catName : 'post'}>
   {data && Content ? (
     <div class="posting">
       <h1>{data.title}</h1>
@@ -102,40 +89,15 @@ const apiDate = apiPost
       )}
       <ExampleCompare examples={data.examples} />
     </div>
-  ) : apiPost ? (
-    <div class="posting">
-      <h1>{apiPost.title}</h1>
-      <div class="attrs">
-        <span class="kind">post</span>
-        {apiPost.categories.map((cat) => (
-          <span>
-            <a href={`/s/${cat.slug}`}>{cat.name}</a>
-          </span>
-        ))}
-      </div>
-      <p class="small">updated {apiDate}</p>
-      {apiPost.items?.map((item) =>
-        item.kind === 'link' ? (
-          <p class="item-link">
-            <a href={item.url}>{item.url}</a>
-          </p>
-        ) : item.kind === 'file' ? (
-          <div>
-            <p class="item-file">
-              <span class="price">{item.filename}</span> <span class="muted">{item.mime ?? 'text/markdown'}</span>
-            </p>
-            {item.body_text && <pre class="wrap">{item.body_text}</pre>}
-          </div>
-        ) : (
-          <pre class="wrap">{item.body_text}</pre>
-        ),
-      )}
-      {!apiPost.items?.length && <p class="muted">This post has no content items yet.</p>}
-    </div>
   ) : (
-    <div class="posting">
-      <h1>{props.source === 'api' ? props.slug : 'missing entry'}</h1>
-      <p class="muted">This post is temporarily unavailable. The API did not answer at build time.</p>
+    <div class="posting" id="detail" data-slug={props.source === 'api' ? props.slug : ''}>
+      <p class="muted">loading post…</p>
     </div>
   )}
+  <script>
+    import { mountPostDetail } from '../../lib/postDetail';
+
+    const root = document.getElementById('detail') as HTMLElement | null;
+    if (root?.dataset.slug) void mountPostDetail(root, root.dataset.slug);
+  </script>
 </Base>

@@ -1,0 +1,22 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="not found">
+  <div class="posting" id="detail" hidden>
+    <p class="muted">loading post…</p>
+  </div>
+  <p id="nf">page not found - <a href="/">back to the list</a></p>
+  <script>
+    import { mountPostDetail } from '../lib/postDetail';
+
+    // On hosts that serve this file for unknown paths, /entry/<new-slug> still
+    // opens the post even though the static build never wrote a file for it.
+    const match = location.pathname.match(/^\/entry\/([a-z0-9-]+)\/?$/);
+    if (match) {
+      const root = document.getElementById('detail') as HTMLElement;
+      (document.getElementById('nf') as HTMLElement).hidden = true;
+      root.hidden = false;
+      void mountPostDetail(root, match[1]);
+    }
+  </script>
+</Base>

@@ -97,12 +97,11 @@ export interface CreateCategoryInput {
 }
 
 export interface CreatePostInput {
-  slug: string;
+  /** Optional - the API generates one from the title when omitted. */
+  slug?: string;
   title: string;
-  /** Slug of an existing top-level category. */
+  /** Slug of an existing category - top-level or one of its derivatives. */
   category: string;
-  /** Optional slug of a direct child of `category`. */
-  derivative?: string;
   /** Array order is display order. Send only the fields owned by each `kind`. */
   items: { kind: ItemKind; body_text?: string; url?: string; filename?: string; mime?: string }[];
 }
@@ -255,6 +254,12 @@ export async function createPost(input: CreatePostInput, token: string, fetchImp
   );
 }
 
+/** Owner-only: the API answers 403 for someone else's post. 204, nothing back. */
+export async function deletePost(slug: string, token: string, fetchImpl?: FetchLike): Promise<void> {
+  const path = `/posts/${encodeURIComponent(slug)}`;
+  await apiFetch<void>(path, { method: 'DELETE', token, fetchImpl });
+}
+
 export async function createCategory(
   input: CreateCategoryInput,
   token: string,
@@ -298,7 +303,7 @@ export function postToRow(post: ApiPost): ApiRow {
   const summary = postSummary(post);
   const category = post.categories[0]?.slug ?? UNCATEGORIZED;
   return {
-    url: `/entry/${post.slug}`,
+    url: `/entry/?s=${encodeURIComponent(post.slug)}`,
     title: post.title,
     summary,
     category,
