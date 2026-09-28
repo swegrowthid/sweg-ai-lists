@@ -14,8 +14,8 @@ import Base from '../layouts/Base.astro';
     </div>
     <div class="row">
       <label for="slug">slug</label>
-      <input type="text" id="slug" name="slug" maxlength="100" pattern="[a-z0-9-]+" required />
-      <p class="small">lowercase letters, digits, hyphens. unique across posts.</p>
+      <input type="text" id="slug" name="slug" maxlength="100" pattern="[a-z0-9-]+" placeholder="setup-claude-code" required />
+      <p class="small">the URL path of the entry: lowercase letters, digits, hyphens. e.g. <code>setup-claude-code</code>. unique across posts.</p>
     </div>
     <div class="row">
       <label for="category">category</label>
@@ -45,11 +45,12 @@ import Base from '../layouts/Base.astro';
     </div>
     <div class="row" id="url-row" hidden>
       <label for="url">url</label>
-      <input type="text" id="url" name="url" />
+      <input type="url" id="url" name="url" placeholder="https://github.com/you/repo" />
+      <p class="small">full link starting with <code>https://</code> - bare domains are rejected.</p>
     </div>
     <div class="row" id="filename-row" hidden>
       <label for="filename">filename</label>
-      <input type="text" id="filename" name="filename" />
+      <input type="text" id="filename" name="filename" placeholder="SKILL.md" />
     </div>
     <div class="row" id="mime-row" hidden>
       <label for="mime">mime</label>
@@ -125,6 +126,11 @@ instead of install.</pre>
       byId<HTMLDivElement>('filename-row').hidden = value !== 'file';
       byId<HTMLDivElement>('mime-row').hidden = value !== 'file';
       byId<HTMLLabelElement>('body-label').textContent = value === 'file' ? 'file contents' : 'body';
+      // The API rejects an empty field that the kind owns - required moves
+      // that check from the server response to the field itself.
+      byId<HTMLInputElement>('url').required = value === 'link';
+      byId<HTMLTextAreaElement>('body').required = value !== 'link';
+      byId<HTMLInputElement>('filename').required = value === 'file';
     }
 
     // Only the fields that belong to the chosen kind are sent; the API rejects extras.
@@ -132,7 +138,10 @@ instead of install.</pre>
       const kindValue = kind.value as ItemKind;
       const item: CreatePostInput['items'][number] = { kind: kindValue };
       if (kindValue === 'link') {
-        item.url = byId<HTMLInputElement>('url').value.trim();
+        // The API requires an absolute http(s) URL; forgive a bare domain.
+        let link = byId<HTMLInputElement>('url').value.trim();
+        if (link && !/^https?:\/\//i.test(link)) link = `https://${link}`;
+        item.url = link;
       } else {
         item.body_text = byId<HTMLTextAreaElement>('body').value;
         if (kindValue === 'file') {
