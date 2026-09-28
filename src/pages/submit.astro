@@ -5,7 +5,7 @@ import Base from '../layouts/Base.astro';
   <h2>post an entry</h2>
   <p>
     Posts go straight to the live API and appear here after the next site build. An API account
-    is created once with <code>POST /users/register</code>, then <a href="/login">log in</a>.
+    is created once at <a href="/register">register</a>, then <a href="/login">log in</a>.
   </p>
   <form class="form" id="post-form">
     <div class="row">
@@ -18,9 +18,16 @@ import Base from '../layouts/Base.astro';
       <p class="small">lowercase letters, digits, hyphens. unique across posts.</p>
     </div>
     <div class="row">
-      <label for="categories">categories</label>
-      <input type="text" id="categories" name="categories" required />
-      <p class="small">comma-separated slugs that already exist, e.g. <code>coding-agent</code>.</p>
+      <label for="category">category</label>
+      <input type="text" id="category" name="category" list="category-list" maxlength="100" required />
+      <datalist id="category-list"></datalist>
+      <p class="small" id="category-hint">top-level slug, e.g. <code>coding</code>.</p>
+    </div>
+    <div class="row">
+      <label for="derivative">derivative</label>
+      <input type="text" id="derivative" name="derivative" list="derivative-list" maxlength="100" />
+      <datalist id="derivative-list"></datalist>
+      <p class="small">optional - a direct child of the category, e.g. <code>claude-code</code>.</p>
     </div>
     <div class="row">
       <label for="kind">item kind</label>
@@ -81,8 +88,8 @@ instead of install.</pre>
   <p>Every entry passes the <a href="/help">review bar</a> before it lists.</p>
 
   <script>
-    import { ApiError, createPost } from '../lib/api';
-    import type { CreatePostInput, ItemKind, TokenPair } from '../lib/api';
+    import { ApiError, createPost, fetchCategories } from '../lib/api';
+    import type { ApiCategory, CreatePostInput, ItemKind, TokenPair } from '../lib/api';
 
     const TOKEN_KEY = 'sweg-ai-tokens';
 
@@ -134,15 +141,45 @@ instead of install.</pre>
           if (mime) item.mime = mime;
         }
       }
+      const derivative = byId<HTMLInputElement>('derivative').value.trim();
       return {
         slug: byId<HTMLInputElement>('slug').value.trim(),
         title: byId<HTMLInputElement>('title').value.trim(),
-        categories: byId<HTMLInputElement>('categories')
-          .value.split(',')
-          .map((slug) => slug.trim())
-          .filter(Boolean),
+        category: byId<HTMLInputElement>('category').value.trim(),
+        ...(derivative ? { derivative } : {}),
         items: [item],
       };
+    }
+
+    // Category slugs come from the API; datalists keep the inputs usable when
+    // the fetch cannot run (offline, or a CORS-blocked cross-origin deploy).
+    let categories: ApiCategory[] = [];
+
+    function fill(listId: string, slugs: string[]) {
+      const list = byId<HTMLDataListElement>(listId);
+      list.replaceChildren(...slugs.map((slug) => new Option(slug, slug)));
+    }
+
+    function syncDerivatives() {
+      const parent = byId<HTMLInputElement>('category').value.trim();
+      const children = categories.filter((c) => c.parent_slug === parent).map((c) => c.slug);
+      fill('derivative-list', children);
+    }
+
+    async function loadCategories() {
+      const hint = byId<HTMLParagraphElement>('category-hint');
+      try {
+        categories = await fetchCategories();
+      } catch {
+        hint.textContent = 'could not load category slugs from the API - type one that exists.';
+        return;
+      }
+      fill(
+        'category-list',
+        categories.filter((c) => !c.parent_slug).map((c) => c.slug),
+      );
+      syncDerivatives();
+      hint.textContent = `${categories.length} slugs loaded - top-level in category, children in derivative.`;
     }
 
     function setStatus(text: string, cls: string) {
@@ -180,7 +217,9 @@ instead of install.</pre>
     });
 
     kind.addEventListener('change', syncKind);
+    byId<HTMLInputElement>('category').addEventListener('input', syncDerivatives);
     syncKind();
     renderAuth();
+    void loadCategories();
   </script>
 </Base>

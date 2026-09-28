@@ -193,6 +193,14 @@ h1 .price { font-family: inherit; }
 .linkbutton { background: none; border: 0; padding: 0; color: var(--link); cursor: pointer; }
 .linkbutton:hover { text-decoration: underline; }
 
+/* auth pages (login/register): one centered column holding a boxed form */
+.auth { max-width: 340px; margin: 24px auto; }
+.auth .box { padding: 16px; }
+.auth .form { max-width: none; }
+.auth .form input[type=text], .auth .form input[type=email], .auth .form input[type=password] { width: 100%; }
+.auth .form .actions button { width: 100%; }
+.auth .alt { text-align: center; font-size: 14px; margin: 10px 0 0; }
+
 /* kind + status chips */
 .kind { font-size: 13px; padding: 1px 6px; border: 1px solid var(--hairline); }
 .kind-skill { color: var(--kind-skill); border-color: var(--kind-skill-border); }

@@ -2,30 +2,33 @@
 import Base from '../layouts/Base.astro';
 ---
 <Base title="register">
-  <h2>register</h2>
-  <p>
-    No account yet? Create one here, then <a href="/login">log in</a>. Registration only
-    creates the account — logging in is what stores the token this browser posts with.
-  </p>
-  <form class="form" id="register-form">
-    <div class="row">
-      <label for="username">username</label>
-      <input type="text" id="username" name="username" autocomplete="username" minlength="3" required />
+  <div class="auth">
+    <h2>register</h2>
+    <p>Create a free account to post entries under your name.</p>
+    <div class="box">
+      <form class="form" id="register-form">
+        <div class="row">
+          <label for="username">username</label>
+          <input type="text" id="username" name="username" autocomplete="username" minlength="3" required />
+          <p class="small">at least 3 characters.</p>
+        </div>
+        <div class="row">
+          <label for="email">email</label>
+          <input type="email" id="email" name="email" autocomplete="email" required />
+        </div>
+        <div class="row">
+          <label for="password">password</label>
+          <input type="password" id="password" name="password" autocomplete="new-password" maxlength="72" required />
+          <p class="small">up to 72 characters.</p>
+        </div>
+        <div class="actions">
+          <button type="submit">sign up</button>
+        </div>
+        <p class="small" id="status" hidden></p>
+      </form>
     </div>
-    <div class="row">
-      <label for="email">email</label>
-      <input type="email" id="email" name="email" autocomplete="email" required />
-    </div>
-    <div class="row">
-      <label for="password">password</label>
-      <input type="password" id="password" name="password" autocomplete="new-password" maxlength="72" required />
-    </div>
-    <div class="actions">
-      <button type="submit">register</button>
-    </div>
-  </form>
-  <p class="small" id="status" hidden></p>
-  <p class="small">Have an account? <a href="/login">log in</a>.</p>
+    <p class="alt">Already have an account? <a href="/login">log in</a></p>
+  </div>
 
   <script>
     import { ApiError, login, register } from '../lib/api';

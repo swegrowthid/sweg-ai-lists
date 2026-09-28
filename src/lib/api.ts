@@ -37,6 +37,8 @@ const CategorySchema = z.object({
   id: z.string(),
   slug: z.string(),
   name: z.string(),
+  /** Null for top-level categories; the parent's slug for derivatives (max two levels). */
+  parent_slug: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -97,8 +99,10 @@ export interface CreateCategoryInput {
 export interface CreatePostInput {
   slug: string;
   title: string;
-  /** Existing category slugs, one to eight. */
-  categories: string[];
+  /** Slug of an existing top-level category. */
+  category: string;
+  /** Optional slug of a direct child of `category`. */
+  derivative?: string;
   /** Array order is display order. Send only the fields owned by each `kind`. */
   items: { kind: ItemKind; body_text?: string; url?: string; filename?: string; mime?: string }[];
 }
