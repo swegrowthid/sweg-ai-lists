@@ -1,0 +1,149 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="profile" crumb="profile">
+  <h2>profile</h2>
+
+  <p class="muted" id="checking">checking your account…</p>
+
+  <p id="guest" hidden>
+    You are not logged in. <a href="/login">log in</a> or <a href="/register">register</a>.
+  </p>
+
+  <p id="expired" hidden>
+    Session expired. <a href="/login">log in</a> again to keep posting.
+  </p>
+
+  <div class="box" id="card" hidden>
+    <div class="who">
+      <span class="avatar" aria-hidden="true">
+        <svg viewBox="0 0 100 100" width="64" height="64">
+          <circle class="av-bg" cx="50" cy="50" r="50" />
+          <circle class="av-fg" cx="50" cy="37" r="17" />
+          <path class="av-fg" d="M50 58c-19 0-33 11-36 27a50 50 0 0 0 72 0C83 69 69 58 50 58Z" />
+          <circle class="av-ring" cx="50" cy="50" r="49" />
+        </svg>
+      </span>
+      <div>
+        <strong id="uname"></strong>
+        <p class="small muted">logged in on this browser</p>
+      </div>
+    </div>
+    <table>
+      <tr><th>username</th><td id="f-username"></td></tr>
+      <tr><th>email</th><td id="f-email">loading…</td></tr>
+      <tr><th>member since</th><td id="f-since">loading…</td></tr>
+    </table>
+    <p class="small err" id="details-note" hidden></p>
+    <p class="small">
+      <button type="button" class="linkbutton" id="logout">log out</button>
+      · <a href="/submit">post an entry</a>
+    </p>
+  </div>
+
+  <script>
+    import { ApiError, fetchUsers, logout, refresh } from '../lib/api';
+    import type { TokenPair } from '../lib/api';
+
+    const TOKEN_KEY = 'sweg-ai-tokens';
+
+    // Element lookups are typed here; the markup above owns these ids.
+    function byId<T extends HTMLElement>(id: string): T {
+      return document.getElementById(id) as T;
+    }
+
+    interface Claims {
+      /** User id (uuid) - matches User.id from GET /users. */
+      sub?: string;
+      username?: string;
+      exp?: number;
+    }
+
+    function storedPair(): TokenPair | null {
+      try {
+        return JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null');
+      } catch {
+        return null;
+      }
+    }
+
+    /** The access token is a JWT whose payload carries `sub` and `username`. */
+    function claims(token: string): Claims | null {
+      try {
+        const body = token.split('.')[1];
+        return JSON.parse(atob(body.replace(/-/g, '+').replace(/_/g, '/')));
+      } catch {
+        return null;
+      }
+    }
+
+    /** A live pair, or null. A dead access token gets one silent refresh -
+     *  the refresh token is what keeps the session, not the access token. */
+    async function ensurePair(): Promise<TokenPair | null> {
+      const pair = storedPair();
+      if (!pair?.access_token) return null;
+      const c = claims(pair.access_token);
+      if (c?.exp && c.exp * 1000 > Date.now()) return pair;
+      if (!pair.refresh_token) return null;
+      try {
+        const fresh = await refresh(pair.refresh_token);
+        localStorage.setItem(TOKEN_KEY, JSON.stringify(fresh));
+        return fresh;
+      } catch {
+        return null;
+      }
+    }
+
+    async function main() {
+      const hadTokens = !!storedPair();
+      const pair = await ensurePair();
+      const c = pair ? claims(pair.access_token) : null;
+      byId<HTMLParagraphElement>('checking').hidden = true;
+      if (!pair || !c?.sub) {
+        // Tokens existed but died (refresh rejected) -> expired, not guest.
+        byId<HTMLParagraphElement>(hadTokens ? 'expired' : 'guest').hidden = false;
+        return;
+      }
+
+      const card = byId<HTMLDivElement>('card');
+      card.hidden = false;
+      // The JWT already proves identity - paint it before any fetch lands.
+      const username = c.username ?? '';
+      byId('uname').textContent = username;
+      byId('f-username').textContent = username;
+
+      byId<HTMLButtonElement>('logout').addEventListener('click', () => {
+        // Revoke the refresh token server-side; failure still logs out locally.
+        if (pair.refresh_token) void logout(pair.refresh_token).catch(() => {});
+        localStorage.removeItem(TOKEN_KEY);
+        location.href = '/login';
+      });
+
+      try {
+        // No GET /users/{id} on the API - find self by the token's `sub`.
+        const me = (await fetchUsers(pair.access_token)).find((u) => u.id === c.sub);
+        if (!me) throw new ApiError(0, 'account not found in the user list');
+        byId('f-email').textContent = me.email;
+        const since = new Date(me.created_at);
+        byId('f-since').textContent = Number.isNaN(+since)
+          ? me.created_at
+          : since.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          localStorage.removeItem(TOKEN_KEY);
+          card.hidden = true;
+          byId<HTMLParagraphElement>('expired').hidden = false;
+          return;
+        }
+        // Partial: the card still proves login; only the server fields are missing.
+        byId('f-email').textContent = '—';
+        byId('f-since').textContent = '—';
+        const note = byId<HTMLParagraphElement>('details-note');
+        note.textContent = 'could not load account details from the API - showing what the token holds.';
+        note.hidden = false;
+      }
+    }
+
+    void main();
+  </script>
+</Base>

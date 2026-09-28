@@ -201,6 +201,15 @@ h1 .price { font-family: inherit; }
 .auth .form .actions button { width: 100%; }
 .auth .alt { text-align: center; font-size: 14px; margin: 10px 0 0; }
 
+/* profile card: silhouette avatar + identity line over a label table */
+.who { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.who strong { font-size: 18px; }
+.who p { margin: 0; }
+.avatar { display: inline-flex; line-height: 0; }
+.avatar .av-bg { fill: var(--callout-bg); }
+.avatar .av-fg { fill: var(--input-border); }
+.avatar .av-ring { fill: none; stroke: var(--hairline); stroke-width: 2; }
+
 /* kind + status chips */
 .kind { font-size: 13px; padding: 1px 6px; border: 1px solid var(--hairline); }
 .kind-skill { color: var(--kind-skill); border-color: var(--kind-skill-border); }

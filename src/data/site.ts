@@ -36,6 +36,7 @@ export const NAV: { href: string; label: string; badge?: boolean; auth?: 'in' | 
   { href: '/wanted', label: 'wanted', badge: true },
   { href: '/search', label: 'search' },
   { href: '/help', label: 'how it works' },
+  { href: '/profile', label: 'profile', auth: 'in' },
   { href: '/login', label: 'login', auth: 'out' },
   { href: '/register', label: 'register', auth: 'out' },
 ];

@@ -204,6 +204,10 @@ export async function fetchPost(slug: string, fetchImpl?: FetchLike): Promise<Ap
   return toOne(PostSchema, await apiFetch<unknown>(path, { fetchImpl }), path);
 }
 
+export async function fetchUsers(token: string, fetchImpl?: FetchLike): Promise<ApiUser[]> {
+  return toRows(UserSchema, await apiFetch<unknown>('/users', { token, fetchImpl }), '/users');
+}
+
 // --- auth --------------------------------------------------------------------
 
 export async function login(identifier: string, password: string, fetchImpl?: FetchLike): Promise<TokenPair> {
