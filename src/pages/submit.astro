@@ -2,7 +2,11 @@
 import Base from '../layouts/Base.astro';
 ---
 <Base title="post an entry">
-  <h2>post an entry</h2>
+  <header class="page-head">
+    <p class="eyebrow">contribute to the catalog</p>
+    <h1>Post an entry</h1>
+    <p class="lede">Share a useful AI workflow with the community.</p>
+  </header>
   <p>
     Posts go straight to the live API and open right away. An API account
     is created once at <a href="/register">register</a>, then <a href="/login">log in</a>.
@@ -53,7 +57,8 @@ import Base from '../layouts/Base.astro';
   <p class="small" id="status" hidden></p>
   <p class="small" id="auth"></p>
 
-  <h3>or open a pull request</h3>
+  <section class="home-section">
+  <h2>Contribute by pull request</h2>
   <ol>
     <li>Write the file at <code>src/content/entries/your-slug.md</code>.</li>
     <li>Match the schema: frontmatter below plus your SKILL.md text or setting prompt as the body.</li>
@@ -77,6 +82,7 @@ examples:
 Your SKILL.md body here. Settings use target/model
 instead of install.</pre>
   <p>Every entry passes the <a href="/help">review bar</a> before it lists.</p>
+  </section>
 
   <script>
     import { ApiError, createPost, fetchCategories } from '../lib/api';

@@ -1,11 +1,36 @@
 ---
+import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
+import { CATEGORIES, CATEGORY_NAME } from '../data/site';
 import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
 import type { ApiCategory, ApiPost } from '../lib/api';
 
-// Build-time snapshot: the client script below refreshes the same sections
-// from the live API, so new posts appear without a rebuild.
+const localEntries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
+const localRows = localEntries.map((entry) => {
+  const { data } = entry;
+  const ts = data.updated.getTime();
+  return {
+    ts,
+    row: {
+      url: `/entry/${entry.id}`,
+      title: data.title,
+      summary: data.summary,
+      category: data.category,
+      author: data.author,
+      display: data.kind === 'setting' ? 'setting' : 'free',
+      date: data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      attrs: {
+        'data-source': 'local',
+        'data-ts': String(ts),
+        'data-kind': data.kind,
+        'data-category': data.category,
+        'data-text': `${data.title} ${data.summary} ${data.tags.join(' ')}`.toLowerCase(),
+      },
+    },
+  };
+});
+
 let apiPosts: ApiPost[] = [];
 try {
   apiPosts = await fetchPosts();
@@ -13,134 +38,190 @@ try {
   apiPosts = [];
 }
 
-let cats: ApiCategory[] = [];
+let apiCategories: ApiCategory[] = [];
 try {
-  cats = await fetchCategories();
+  apiCategories = await fetchCategories();
 } catch {
-  cats = [];
+  apiCategories = [];
 }
 
-// Posts grouped by first category slug, newest first on created_at.
-const sections = cats.map((cat) => ({
-  cat,
-  rows: apiPosts
-    .filter((post) => (post.categories[0]?.slug ?? 'uncategorized') === cat.slug)
-    .map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) }))
-    .sort((a, b) => b.ts - a.ts)
-    .map((item) => item.row),
-}));
+const localSlugs = new Set(localEntries.map((entry) => entry.id));
+const apiRows = apiPosts.filter((post) => !localSlugs.has(post.slug)).map((post) => {
+  const row = postToRow(post);
+  const ts = Date.parse(post.created_at) || 0;
+  return {
+    ts,
+    row: { ...row, attrs: { ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) } },
+  };
+});
+
+const rows = [...localRows, ...apiRows].sort((a, b) => b.ts - a.ts).map((item) => item.row);
+const homeRowLimit = 5;
+const homeCategoryLimit = 4;
+const categoryMap = new Map<string, string>(CATEGORIES.map((category) => [category.slug, category.name]));
+for (const entry of localEntries) {
+  if (!categoryMap.has(entry.data.category)) {
+    categoryMap.set(entry.data.category, CATEGORY_NAME[entry.data.category] ?? entry.data.category);
+  }
+}
+for (const category of apiCategories) categoryMap.set(category.slug, category.name);
+const categories = [...categoryMap].map(([slug, name]) => ({ slug, name }));
 ---
 
 <Base>
-  <div id="front">
-    <div class="col">
-      <form class="search" action="/search" method="get">
-        <input type="text" name="q" />
-        <button type="submit">&gt;</button>
-      </form>
-      <div class="box lists">
-        <ul id="cat-list">
-          {cats.map((c) => (
-            <li data-slug={c.slug}><a href={`/s/${c.slug}`}>{c.name}</a></li>
-          ))}
-          <li data-static><a href="/wanted">wanted</a></li>
-          <li data-static><a href="/submit" data-auth="in" hidden>submit</a></li>
-          <li data-static><a href="/help">help</a></li>
-        </ul>
-      </div>
+  <section class="home-hero">
+    <div class="home-hero-copy">
+      <p class="eyebrow">community-built · practical by design</p>
+      <h1>Useful AI workflows, shared openly.</h1>
+      <p class="lede">Find skills that teach an agent a job, and settings that give it the right starting point.</p>
     </div>
-    <div class="col" style="flex:1" id="home-groups">
-      {sections.map((s) => (
-        <section data-cat={s.cat.slug}>
-          <h3><a href={`/s/${s.cat.slug}`}>{s.cat.name}</a></h3>
-          {s.rows.length > 0 ? <EntryRows rows={s.rows} /> : <p class="muted">No entries yet in this category.</p>}
-        </section>
+    <form class="hero-search" action="/search" method="get" role="search">
+      <input type="search" name="q" aria-label="Search skills and settings" placeholder="Search the catalog" />
+      <button type="submit" aria-label="Search">Search</button>
+    </form>
+  </section>
+
+  <section class="home-section" aria-labelledby="browse-heading">
+    <div class="section-heading">
+      <h2 id="browse-heading">Browse by category</h2>
+      <a href="/search">all entries →</a>
+    </div>
+    <div class="category-grid" id="category-grid" data-limit={homeCategoryLimit}>
+      {categories.map((category, index) => (
+        <a class="category-link" data-slug={category.slug} href={`/s/${category.slug}`} hidden={index >= homeCategoryLimit}>
+          {category.name}<span class="arrow" aria-hidden="true">→</span>
+        </a>
       ))}
-      {sections.length === 0 && <p class="muted">No entries yet.</p>}
     </div>
-  </div>
+    <button
+      class="category-toggle"
+      id="category-toggle"
+      type="button"
+      aria-controls="category-grid"
+      aria-expanded="false"
+      hidden={categories.length <= homeCategoryLimit}
+    >
+      View all {categories.length} categories →
+    </button>
+  </section>
+
+  <section class="home-section" aria-labelledby="recent-heading">
+    <div class="section-heading">
+      <h2 id="recent-heading">Recently added</h2>
+      <a href="/search">View all entries →</a>
+    </div>
+    <div id="home-rows" data-limit={homeRowLimit}>
+      <EntryRows rows={rows} limit={homeRowLimit} />
+    </div>
+    <p class="empty-state" id="home-empty" hidden={rows.length > 0}>No entries yet. Check back soon or share one with the community.</p>
+  </section>
 
   <script>
     import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
-    import { CATEGORY_NAME } from '../data/site';
+    import { CATEGORIES, CATEGORY_NAME } from '../data/site';
+
+    const categoryGrid = document.getElementById('category-grid');
+    const categoryToggle = document.getElementById('category-toggle') as HTMLButtonElement | null;
+    const categoryLimit = Number(categoryGrid?.getAttribute('data-limit')) || 4;
+    let categoriesExpanded = false;
+
+    function updateCategoryVisibility() {
+      if (!categoryGrid || !categoryToggle) return;
+      const links = categoryGrid.querySelectorAll<HTMLAnchorElement>('a[data-slug]');
+      links.forEach((link, index) => {
+        link.hidden = !categoriesExpanded && index >= categoryLimit;
+      });
+      categoryToggle.hidden = links.length <= categoryLimit;
+      categoryToggle.setAttribute('aria-expanded', String(categoriesExpanded && links.length > categoryLimit));
+      categoryToggle.textContent = categoriesExpanded ? 'Show fewer categories ↑' : `View all ${links.length} categories →`;
+    }
+
+    categoryToggle?.addEventListener('click', () => {
+      categoriesExpanded = !categoriesExpanded;
+      updateCategoryVisibility();
+    });
+    updateCategoryVisibility();
 
     function esc(value: string): string {
       return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
     }
 
-    function rowHtml(row: ReturnType<typeof postToRow>): string {
-      const summary =
-        row.summary && row.summary !== row.title ? `<span class="muted"> - ${esc(row.summary)}</span>` : '';
-      const attrs = Object.entries(row.attrs ?? {})
-        .map(([k, v]) => ` ${k}="${esc(v)}"`)
+    function rowHtml(row: ReturnType<typeof postToRow>, ts: number, categoryName: string): string {
+      const kind = row.attrs['data-kind'] ?? row.display;
+      const summary = row.summary && row.summary !== row.title ? `<span class="entry-summary">${esc(row.summary)}</span>` : '';
+      const attrs = Object.entries({ ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) })
+        .map(([key, value]) => ` ${key}="${esc(value)}"`)
         .join('');
       return (
         `<tr${attrs}><td class="d">${esc(row.date)}</td>` +
-        `<td><a href="${esc(row.url)}">${esc(row.title)}</a>${summary}</td>` +
-        `<td class="c"><a href="/s/${esc(row.category)}">${esc(CATEGORY_NAME[row.category] ?? row.category)}</a></td>` +
-        `<td class="c">${esc(row.author)}</td>` +
+        `<td class="entry-main"><a class="entry-title" href="${esc(row.url)}">${esc(row.title)}</a>` +
+        `<span class="entry-kind">${esc(kind)}</span>${summary}</td>` +
+        `<td class="c category-cell"><a href="/s/${encodeURIComponent(row.category)}">${esc(categoryName)}</a></td>` +
+        `<td class="c author-cell">${esc(row.author)}</td>` +
         `<td class="p"><span class="price">${esc(row.display)}</span></td></tr>`
       );
     }
 
-    // Live refresh: same grouping as the build-time snapshot above, rebuilt
-    // from GET /categories + GET /posts. No new backend route; the existing
-    // list endpoint already returns every post with its categories.
     async function refreshHome() {
-      let cats;
+      let categories;
       let posts;
       try {
-        [cats, posts] = await Promise.all([fetchCategories(), fetchPosts()]);
+        [categories, posts] = await Promise.all([fetchCategories(), fetchPosts()]);
       } catch {
-        return; // keep the build-time snapshot
+        return; // Keep the build snapshot, including local Markdown entries.
       }
-      const list = document.getElementById('cat-list');
-      if (list) {
-        list.querySelectorAll('li[data-slug]').forEach((el) => el.remove());
-        const anchor = list.querySelector('li[data-static]');
-        for (const cat of cats) {
-          const li = document.createElement('li');
-          li.setAttribute('data-slug', cat.slug);
-          const a = document.createElement('a');
-          a.href = `/s/${cat.slug}`;
-          a.textContent = cat.name;
-          li.appendChild(a);
-          if (anchor) list.insertBefore(li, anchor);
-          else list.appendChild(li);
-        }
+
+      const grid = document.getElementById('category-grid');
+      if (grid) {
+        const categoryMap = new Map<string, string>(CATEGORIES.map((category) => [category.slug, category.name]));
+        grid.querySelectorAll<HTMLAnchorElement>('a[data-slug]').forEach((link) => {
+          const slug = link.dataset.slug;
+          if (slug) categoryMap.set(slug, link.textContent?.replace('→', '').trim() ?? slug);
+        });
+        for (const category of categories) categoryMap.set(category.slug, category.name);
+        grid.replaceChildren(
+          ...[...categoryMap].map(([slug, name]) => {
+            const link = document.createElement('a');
+            link.className = 'category-link';
+            link.dataset.slug = slug;
+            link.href = `/s/${encodeURIComponent(slug)}`;
+            link.append(document.createTextNode(name));
+            const arrow = document.createElement('span');
+            arrow.className = 'arrow';
+            arrow.setAttribute('aria-hidden', 'true');
+            arrow.textContent = '→';
+            link.append(arrow);
+            return link;
+          }),
+        );
+        updateCategoryVisibility();
       }
-      const groups = document.getElementById('home-groups');
-      if (!groups) return;
-      const byCat = new Map<string, { ts: number; row: ReturnType<typeof postToRow> }[]>();
+
+      const table = document.querySelector<HTMLTableElement>('#home-rows .rows');
+      const tbody = table?.tBodies[0];
+      if (!tbody) return;
+      const rowLimit = Number(document.getElementById('home-rows')?.getAttribute('data-limit')) || 5;
+      const localSlugs = new Set(
+        [...tbody.querySelectorAll<HTMLAnchorElement>('tr[data-source="local"] .entry-title')]
+          .map((link) => new URL(link.href).pathname.split('/').filter(Boolean).at(-1) ?? ''),
+      );
+      tbody.querySelectorAll('tr[data-source="api"]').forEach((row) => row.remove());
+      const names = new Map(categories.map((category) => [category.slug, category.name]));
       for (const post of posts) {
-        const slug = post.categories[0]?.slug ?? 'uncategorized';
-        const bucket = byCat.get(slug);
-        const entry = { ts: Date.parse(post.created_at) || 0, row: postToRow(post) };
-        if (bucket) bucket.push(entry);
-        else byCat.set(slug, [entry]);
+        if (localSlugs.has(post.slug)) continue;
+        const row = postToRow(post);
+        const categoryName = names.get(row.category) ?? CATEGORY_NAME[row.category] ?? row.category;
+        const ts = Date.parse(post.created_at) || 0;
+        tbody.insertAdjacentHTML('beforeend', rowHtml(row, ts, categoryName));
       }
-      const slugs = [
-        ...cats.map((c) => c.slug),
-        ...[...byCat.keys()].filter((s) => !cats.some((c) => c.slug === s)),
-      ];
-      if (slugs.length === 0) {
-        groups.innerHTML = `<p class="muted">No entries yet.</p>`;
-        return;
-      }
-      groups.innerHTML = slugs
-        .map((slug) => {
-          const cat = cats.find((c) => c.slug === slug);
-          const name = cat ? cat.name : (CATEGORY_NAME[slug] ?? slug);
-          const rows = (byCat.get(slug) ?? [])
-            .sort((a, b) => b.ts - a.ts)
-            .map((item) => item.row);
-          const body =
-            rows.length > 0
-              ? `<table class="rows"><tbody>${rows.map(rowHtml).join('')}</tbody></table>`
-              : `<p class="muted">No entries yet in this category.</p>`;
-          return `<section data-cat="${esc(slug)}"><h3><a href="/s/${esc(slug)}">${esc(name)}</a></h3>${body}</section>`;
-        })
-        .join('');
+      [...tbody.rows]
+        .sort((a, b) => Number(b.dataset.ts ?? 0) - Number(a.dataset.ts ?? 0))
+        .forEach((row, index) => {
+          tbody.append(row);
+          row.hidden = index >= rowLimit;
+        });
+      const empty = document.getElementById('home-empty');
+      if (empty) empty.hidden = tbody.rows.length > 0;
     }
 
     void refreshHome();

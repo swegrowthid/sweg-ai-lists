@@ -33,6 +33,7 @@ try {
 const entries = (await getCollection('entries')).filter(
   (entry) => entry.data.status === 'approved' && entry.data.category === slug,
 );
+const localSlugs = new Set(entries.map((entry) => entry.id));
 
 const rows = [
   ...entries.map((entry) => ({
@@ -45,23 +46,34 @@ const rows = [
       author: entry.data.author,
       display: entry.data.kind === 'setting' ? 'setting' : 'free',
       date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      attrs: {
+        'data-source': 'local',
+        'data-ts': String(entry.data.updated.getTime()),
+        'data-kind': entry.data.kind,
+        'data-category': entry.data.category,
+        'data-text': `${entry.data.title} ${entry.data.summary} ${entry.data.tags.join(' ')}`.toLowerCase(),
+      },
     },
   })),
   // The API already filtered by `slug`; sorting uses created_at, the field
   // postToRow renders the date from.
-  ...apiPosts.map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
+  ...apiPosts.filter((post) => !localSlugs.has(post.slug)).map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
 ]
   .sort((a, b) => b.ts - a.ts)
   .map((item) => item.row);
 ---
 
 <Base title={name} crumb={name}>
-  <h3>{name}</h3>
+  <header class="page-head">
+    <p class="eyebrow">browse category</p>
+    <h1>{name}</h1>
+    <p class="lede">Community-shared skills and settings in this category.</p>
+  </header>
   {
     rows.length > 0 ? (
       <EntryRows rows={rows} />
     ) : (
-      <p class="muted">No entries yet in this category.</p>
+      <p class="empty-state">No entries yet in this category.</p>
     )
   }
 </Base>

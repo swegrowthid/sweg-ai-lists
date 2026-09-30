@@ -19,24 +19,26 @@ interface Row {
 
 interface Props {
   rows: Row[];
+  limit?: number;
 }
 
-const { rows } = Astro.props;
+const { rows, limit } = Astro.props;
 ---
 <table class="rows">
   <tbody>
     {
-      rows.map((row) => (
-        <tr {...row.attrs}>
+      rows.map((row, index) => (
+        <tr {...row.attrs} hidden={limit !== undefined && index >= limit}>
           <td class="d">{row.date}</td>
-          <td>
-            <a href={row.url}>{row.title}</a>
-            {row.summary && row.summary !== row.title ? <span class="muted"> - {row.summary}</span> : null}
+          <td class="entry-main">
+            <a class="entry-title" href={row.url}>{row.title}</a>
+            <span class="entry-kind">{row.attrs?.['data-kind'] ?? row.display}</span>
+            {row.summary && row.summary !== row.title ? <span class="entry-summary">{row.summary}</span> : null}
           </td>
-          <td class="c">
+          <td class="c category-cell">
             <a href={`/s/${row.category}`}>{CATEGORY_NAME[row.category] ?? row.category}</a>
           </td>
-          <td class="c">{row.author}</td>
+          <td class="c author-cell">{row.author}</td>
           <td class="p">
             <span class="price">{row.display}</span>
           </td>
