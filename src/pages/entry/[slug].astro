@@ -57,6 +57,7 @@ const dateStr = data
   {data && Content ? (
     <div class="posting">
       <h1>{data.title}</h1>
+      <p class="detail-summary">{data.summary}</p>
       <div class="attrs">
         <span class={`kind kind-${data.kind}`}>{data.kind}</span>
         <span class={`st st-${data.status}`}>{data.status}</span>
@@ -67,14 +68,16 @@ const dateStr = data
           <span>{tag}</span>
         ))}
       </div>
-      <p class="small">
+      <p class="post-meta">
         by {data.author} · updated {dateStr} · in{' '}
         <a href={`/s/${data.category}`}>{catName}</a>
       </p>
       {data.kind === 'skill' && data.install && (
-        <p>
-          install: <code>{data.install}</code>
-        </p>
+        <div class="install-callout">
+          <code>{data.install}</code>
+          <button class="copy-button" type="button" data-copy={data.install}>Copy install command</button>
+          <span class="small" data-copy-status aria-live="polite"></span>
+        </div>
       )}
       {data.kind === 'setting' && (data.target || data.model) && (
         <p>
@@ -99,5 +102,17 @@ const dateStr = data
 
     const root = document.getElementById('detail') as HTMLElement | null;
     if (root?.dataset.slug) void mountPostDetail(root, root.dataset.slug);
+
+    document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const status = button.parentElement?.querySelector<HTMLElement>('[data-copy-status]');
+        try {
+          await navigator.clipboard.writeText(button.dataset.copy ?? '');
+          if (status) status.textContent = 'Copied.';
+        } catch {
+          if (status) status.textContent = 'Copy unavailable — select the command above.';
+        }
+      });
+    });
   </script>
 </Base>

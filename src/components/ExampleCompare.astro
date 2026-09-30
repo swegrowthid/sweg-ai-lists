@@ -15,16 +15,31 @@ const uid = `ex-${Math.random().toString(36).slice(2, 9)}`;
 {
   examples.length > 0 && (
     <div id={uid}>
-      <div class="tabs">
+      <div class="tabs" role="tablist" aria-label="Examples">
         {examples.map((_, i) => (
-          <button type="button" class={i === 0 ? 'tab on' : 'tab'}>
+          <button
+            type="button"
+            id={`${uid}-tab-${i}`}
+            class={i === 0 ? 'tab on' : 'tab'}
+            role="tab"
+            aria-selected={i === 0 ? 'true' : 'false'}
+            aria-controls={`${uid}-panel-${i}`}
+            tabindex={i === 0 ? 0 : -1}
+          >
             example {i + 1}
           </button>
         ))}
       </div>
       {examples.map((ex, i) => (
-        <div class="example" hidden={i !== 0}>
-          <p class="small">{ex.prompt}</p>
+        <div
+          class="example"
+          id={`${uid}-panel-${i}`}
+          role="tabpanel"
+          aria-labelledby={`${uid}-tab-${i}`}
+          tabindex="0"
+          hidden={i !== 0}
+        >
+          <p class="prompt">{ex.prompt}</p>
           <div class="compare">
             <div class="pane">
               <h4>without</h4>
@@ -40,15 +55,25 @@ const uid = `ex-${Math.random().toString(36).slice(2, 9)}`;
       <script define:vars={{ uid }}>
         const root = document.getElementById(uid);
         if (root) {
-          const tabs = root.querySelectorAll('.tab');
-          const examples = root.querySelectorAll('.example');
+          const tabs = root.querySelectorAll<HTMLButtonElement>('.tab');
+          const examples = root.querySelectorAll<HTMLElement>('.example');
+          const select = (index, focus = false) => {
+            tabs.forEach((button, i) => {
+              button.classList.toggle('on', i === index);
+              button.setAttribute('aria-selected', String(i === index));
+              button.setAttribute('tabindex', i === index ? '0' : '-1');
+              examples[i].hidden = i !== index;
+            });
+            if (focus) tabs[index].focus();
+          };
           tabs.forEach((btn, i) => {
-            btn.addEventListener('click', () => {
-              tabs.forEach((b) => b.classList.remove('on'));
-              btn.classList.add('on');
-              examples.forEach((block, j) => {
-                block.hidden = i !== j;
-              });
+            btn.addEventListener('click', () => select(i));
+            btn.addEventListener('keydown', (event) => {
+              const key = event.key;
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
+              event.preventDefault();
+              const next = key === 'Home' ? 0 : key === 'End' ? tabs.length - 1 : (i + (key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+              select(next, true);
             });
           });
         }

@@ -26,6 +26,7 @@ try {
 // Without JS the full list still renders, which is the right degraded behavior
 // for a catalog.
 const entries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
+const localSlugs = new Set(entries.map((entry) => entry.id));
 
 const rows = [
   ...entries.map((entry) => ({
@@ -39,6 +40,8 @@ const rows = [
       display: entry.data.kind === 'setting' ? 'setting' : 'free',
       date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       attrs: {
+        'data-source': 'local',
+        'data-ts': String(entry.data.updated.getTime()),
         'data-kind': entry.data.kind,
         'data-category': entry.data.category,
         'data-text': `${entry.data.title} ${entry.data.summary} ${entry.data.tags.join(' ')}`.toLowerCase(),
@@ -48,7 +51,11 @@ const rows = [
   // API posts have no kind/tags, so they filter as kind "post"; postToRow already
   // hangs data-kind, data-category (first slug) and data-text (title + summary) on
   // them, and renders the date from created_at, which is what we sort on.
-  ...apiPosts.map((post) => ({ ts: Date.parse(post.created_at) || 0, row: postToRow(post) })),
+  ...apiPosts.filter((post) => !localSlugs.has(post.slug)).map((post) => {
+    const ts = Date.parse(post.created_at) || 0;
+    const row = postToRow(post);
+    return { ts, row: { ...row, attrs: { ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) } } };
+  }),
 ]
   .sort((a, b) => b.ts - a.ts)
   .map((item) => item.row);
@@ -60,7 +67,11 @@ for (const cat of apiCategories) {
 ---
 
 <Base title="search">
-  <h2>search</h2>
+  <header class="page-head">
+    <p class="eyebrow">find something useful</p>
+    <h1>Search the catalog</h1>
+    <p class="lede">Filter community skills and settings by words, kind, or category.</p>
+  </header>
   <form class="searchbar" method="get" action="/search">
     <label class="inline" for="q">words</label>
     <input type="text" id="q" name="q" />
@@ -85,7 +96,7 @@ for (const cat of apiCategories) {
     <EntryRows rows={rows} />
   </div>
 
-  <p class="muted" id="empty" hidden>No results.</p>
+  <p class="empty-state" id="empty" hidden>No results match those filters.</p>
 
   <script>
     // Re-run on every same-document navigation so back/forward restores the

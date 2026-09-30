@@ -3,7 +3,7 @@
  *  Shared by pages that need to know who is logged in (profile, submit,
  *  post detail delete action). Nothing here renders. */
 
-import { refresh } from './api';
+import { logout, refresh } from './api';
 import type { TokenPair } from './api';
 
 export const TOKEN_KEY = 'sweg-ai-tokens';
@@ -29,6 +29,13 @@ export function savePair(pair: TokenPair): void {
 
 export function clearPair(): void {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+/** Clears the browser session immediately and revokes the refresh token. */
+export function logoutSession(): void {
+  const pair = storedPair();
+  clearPair();
+  if (pair?.refresh_token) void logout(pair.refresh_token).catch(() => {});
 }
 
 /** Decodes the JWT payload. Returns null on any malformed input - the token

@@ -14,6 +14,7 @@ interface Props {
 
 const { title, description, tagline, crumb } = Astro.props;
 const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
+const mastheadLabel = crumb ?? title;
 ---
 <!doctype html>
 <html lang="en">
@@ -22,7 +23,7 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{pageTitle}</title>
     <meta name="description" content={description ?? SITE.description} />
-    <meta name="theme-color" content="#551a8b" id="theme-color" />
+    <meta name="theme-color" content="#f4f6f1" id="theme-color" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -38,17 +39,25 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
     </script>
   </head>
   <body>
-    <div id="masthead">
-      <a class="logo" href="/" aria-label="home"><img src={logoUrl.src ?? logoUrl} alt={SITE.name} width="36" height="34" /></a>
-      {crumb ? <span class="bc">{crumb}</span> : null}
-      <button id="theme-toggle" class="linkbutton" type="button">dark</button>
-    </div>
-    <div id="topnav">
+    <header class="site-header">
+      <div id="masthead">
+        <a class="brand" href="/" aria-label={`${SITE.name} home`}>
+          <img src={logoUrl.src ?? logoUrl} alt="" width="40" height="38" />
+        </a>
+        {mastheadLabel ? <span class="bc">{mastheadLabel}</span> : null}
+        <div class="masthead-actions">
+          <a class="login-link" href="/login" data-auth="out" hidden>Log in</a>
+          <a class="login-link" href="/profile" data-auth="in" hidden>Profile</a>
+          <button class="logout-link" id="header-logout" type="button" data-auth="in" hidden>Log out</button>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">☾</button>
+        </div>
+      </div>
+      <nav id="topnav" aria-label="Main navigation">
       {
         NAV.map((item) => (
           <a
             href={item.href}
-            class={item.badge ? 'badge' : undefined}
+            class:list={[item.badge && 'badge', item.label === 'post an entry' && 'nav-cta']}
             data-auth={item.auth}
             hidden={!!item.auth}
           >
@@ -56,11 +65,13 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
           </a>
         ))
       }
-    </div>
-    <hr />
-    {tagline ? <p class="tagline">{tagline}</p> : null}
-    <slot />
-    <footer>
+      </nav>
+    </header>
+    <main id="main-content">
+      {tagline ? <p class="tagline">{tagline}</p> : null}
+      <slot />
+    </main>
+    <footer class="site-footer">
       <a href="/about">about</a>
       <a href="/help">help</a>
       <a href="/submit" data-auth="in" hidden>submit</a>
@@ -73,8 +84,12 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
         var meta = document.getElementById('theme-color');
         function paint(t) {
           document.documentElement.dataset.theme = t;
-          if (btn) btn.textContent = t === 'dark' ? 'light' : 'dark';
-          if (meta) meta.setAttribute('content', t === 'dark' ? '#1a1a1a' : '#551a8b');
+          if (btn) {
+            btn.textContent = t === 'dark' ? '☀︎' : '☾';
+            btn.setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+            btn.setAttribute('title', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+          }
+          if (meta) meta.setAttribute('content', t === 'dark' ? '#111d20' : '#f4f6f1');
         }
         try {
           paint(document.documentElement.dataset.theme || 'light');
@@ -99,6 +114,14 @@ const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
           if (need === 'in' ? loggedIn : !loggedIn) el.removeAttribute('hidden');
         }
       })();
+    </script>
+    <script>
+      import { logoutSession } from '../lib/session';
+
+      document.getElementById('header-logout')?.addEventListener('click', () => {
+        logoutSession();
+        location.href = '/login';
+      });
     </script>
   </body>
 </html>

@@ -4,7 +4,7 @@
  *  that do not exist yet. */
 
 import { SITE } from '../data/site';
-import { ApiError, deletePost, fetchPost } from './api';
+import { ApiError, deletePost, fetchPost, postSummary } from './api';
 import type { ApiPost, ApiPostItem } from './api';
 import { claims, clearPair, ensurePair, storedPair } from './session';
 
@@ -42,6 +42,8 @@ function renderItem(item: ApiPostItem): HTMLElement {
 function renderPost(post: ApiPost): DocumentFragment {
   const frag = document.createDocumentFragment();
   frag.append(el('h1', undefined, post.title));
+  const summary = postSummary(post);
+  if (summary !== post.title) frag.append(el('p', 'detail-summary', summary));
 
   const attrs = el('div', 'attrs');
   attrs.append(el('span', 'kind', 'post'));
@@ -59,6 +61,22 @@ function renderPost(post: ApiPost): DocumentFragment {
     ? post.updated_at
     : updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   frag.append(note(`updated ${date}`, 'small'));
+
+  const actions = el('div', 'detail-actions');
+  const share = el('button', 'copy-button', 'Copy post link');
+  share.type = 'button';
+  const shareStatus = el('span', 'small');
+  shareStatus.setAttribute('aria-live', 'polite');
+  share.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      shareStatus.textContent = 'Link copied.';
+    } catch {
+      shareStatus.textContent = 'Copy unavailable — copy the page address from your browser.';
+    }
+  });
+  actions.append(share, shareStatus);
+  frag.append(actions);
 
   if (post.items?.length) {
     for (const item of post.items) frag.append(renderItem(item));

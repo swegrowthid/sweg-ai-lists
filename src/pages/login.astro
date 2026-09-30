@@ -3,7 +3,8 @@ import Base from '../layouts/Base.astro';
 ---
 <Base title="login">
   <div class="auth">
-    <h2>login</h2>
+    <p class="eyebrow">welcome back</p>
+    <h1>Log in</h1>
     <p>The token stays in this browser and is what <a href="/submit">submit</a> posts with.</p>
     <div class="box">
       <form class="form" id="login-form">
@@ -28,6 +29,7 @@ import Base from '../layouts/Base.astro';
   <script>
     import { ApiError, login } from '../lib/api';
     import type { TokenPair } from '../lib/api';
+    import { logoutSession } from '../lib/session';
 
     const TOKEN_KEY = 'sweg-ai-tokens';
 
@@ -57,9 +59,8 @@ import Base from '../layouts/Base.astro';
       out.className = 'linkbutton';
       out.textContent = 'log out';
       out.addEventListener('click', () => {
-        localStorage.removeItem(TOKEN_KEY);
-        status.hidden = true;
-        renderState();
+        logoutSession();
+        location.reload();
       });
       state.append(out);
       state.append(' · ');
