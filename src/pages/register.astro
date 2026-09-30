@@ -63,11 +63,7 @@ import Base from '../layouts/Base.astro';
         const user = await register(username, email, password);
         const pair = await login(user.username, password);
         localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        form.reset();
-        setStatus(
-          `registered as ${user.username} and logged in — access token good for ${Math.round(pair.expires_in / 60)} minutes.`,
-          'small ok',
-        );
+        location.href = '/';
       } catch (error) {
         setStatus(
           error instanceof ApiError ? error.message : 'could not reach the API from this page.',

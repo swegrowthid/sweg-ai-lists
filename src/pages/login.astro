@@ -60,7 +60,7 @@ import Base from '../layouts/Base.astro';
       out.textContent = 'log out';
       out.addEventListener('click', () => {
         logoutSession();
-        location.reload();
+        location.href = '/';
       });
       state.append(out);
       state.append(' · ');
@@ -82,10 +82,7 @@ import Base from '../layouts/Base.astro';
           byId<HTMLInputElement>('password').value,
         );
         localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        form.reset();
-        status.className = 'small ok';
-        status.textContent = `logged in — access token good for ${Math.round(pair.expires_in / 60)} minutes.`;
-        renderState();
+        location.href = '/';
       } catch (error) {
         status.className = 'small err';
         // ApiError carries the API's text/plain reason; anything else means the request
