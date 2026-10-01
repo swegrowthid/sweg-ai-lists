@@ -21,7 +21,7 @@ src/content/entries/*.md
 
 - One collection, `entries`. `kind: skill | setting` is the discriminant. Do not split collections.
 - Detail differences render from `kind`: skills show `install`; settings show `target` + `model`.
-- The only client-side JS: search filter on `/search` and example tabs on entry pages. Everything else is server-rendered.
+- The only client-side JS: search filter on `/search`, example tabs on entry pages, the `/entry/?s=` detail mount, and the API refresh on home + `/news` + `/tools`. Everything else is server-rendered.
 - `/search` is prerendered: it ships all approved rows with `data-*` filter keys and filters in the browser. Do not add SSR for this.
 
 ## Key Directories
@@ -32,6 +32,8 @@ src/pages/index.astro     home: sidebar + newest table
 src/pages/s/[slug].astro  category listing (paths generated from CATEGORIES)
 src/pages/entry/[slug].astro  detail page (.posting layout + examples)
 src/pages/search.astro    client-filtered search over prerendered rows
+src/pages/news.astro      AI Tools Digest listing from GET /news (external links, no detail page)
+src/pages/tools.astro     AI tools catalog from GET /tools - client-side cursor pagination (load more), name/category filters
 src/components/           EntryRows (list table), ExampleCompare (tabs + panes)
 src/layouts/Base.astro    masthead, topnav, footer, global stylesheet
 src/data/site.ts          SITE, CATEGORIES, CATEGORY_NAME, NAV - single source of truth

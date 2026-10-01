@@ -2,10 +2,15 @@
 import { CATEGORY_NAME } from "../data/site";
 
 interface Row {
-  url: string;
+  /** Link target for the title. Empty/absent renders the title unlinked. */
+  url?: string;
   title: string;
   summary: string;
   category: string;
+  /** Display text for the category cell; defaults to CATEGORY_NAME/category. */
+  categoryLabel?: string;
+  /** Where the category cell links; defaults to `/s/<category>`. */
+  categoryHref?: string;
   /** What renders in the "who" column: the author. */
   author: string;
   /** What renders in the price cell: "free" or "$X". */
@@ -31,12 +36,12 @@ const { rows, limit } = Astro.props;
         <tr {...row.attrs} hidden={limit !== undefined && index >= limit}>
           <td class="d">{row.date}</td>
           <td class="entry-main">
-            <a class="entry-title" href={row.url}>{row.title}</a>
+            {row.url ? <a class="entry-title" href={row.url}>{row.title}</a> : <span class="entry-title">{row.title}</span>}
             <span class="entry-kind">{row.attrs?.['data-kind'] ?? row.display}</span>
             {row.summary && row.summary !== row.title ? <span class="entry-summary">{row.summary}</span> : null}
           </td>
           <td class="c category-cell">
-            <a href={`/s/${row.category}`}>{CATEGORY_NAME[row.category] ?? row.category}</a>
+            <a href={row.categoryHref ?? `/s/${row.category}`}>{row.categoryLabel ?? CATEGORY_NAME[row.category] ?? row.category}</a>
           </td>
           <td class="c author-cell">{row.author}</td>
           <td class="p">

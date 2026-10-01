@@ -3,8 +3,8 @@ import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
 import { CATEGORIES, CATEGORY_NAME } from '../data/site';
-import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
-import type { ApiCategory, ApiPost } from '../lib/api';
+import { fetchCategories, fetchNews, fetchPosts, newsToRow, postToRow } from '../lib/api';
+import type { ApiCategory, ApiNews, ApiPost } from '../lib/api';
 
 const localEntries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
 const localRows = localEntries.map((entry) => {
@@ -57,6 +57,7 @@ const apiRows = apiPosts.filter((post) => !localSlugs.has(post.slug)).map((post)
 
 const rows = [...localRows, ...apiRows].sort((a, b) => b.ts - a.ts).map((item) => item.row);
 const homeRowLimit = 5;
+const homeNewsLimit = 5;
 const homeCategoryLimit = 4;
 const categoryMap = new Map<string, string>(CATEGORIES.map((category) => [category.slug, category.name]));
 for (const entry of localEntries) {
@@ -66,6 +67,14 @@ for (const entry of localEntries) {
 }
 for (const category of apiCategories) categoryMap.set(category.slug, category.name);
 const categories = [...categoryMap].map(([slug, name]) => ({ slug, name }));
+
+let apiNews: ApiNews[] = [];
+try {
+  apiNews = await fetchNews();
+} catch {
+  apiNews = [];
+}
+const newsRows = apiNews.map(newsToRow);
 ---
 
 <Base>
@@ -116,8 +125,20 @@ const categories = [...categoryMap].map(([slug, name]) => ({ slug, name }));
     <p class="empty-state" id="home-empty" hidden={rows.length > 0}>No entries yet. Check back soon or share one with the community.</p>
   </section>
 
+  <section class="home-section" aria-labelledby="news-heading">
+    <div class="section-heading">
+      <h2 id="news-heading">AI tools digest</h2>
+      <a href="/news">all news →</a>
+    </div>
+    <div id="news-rows" data-limit={homeNewsLimit}>
+      <EntryRows rows={newsRows} limit={homeNewsLimit} />
+    </div>
+    <p class="empty-state" id="news-empty" hidden={newsRows.length > 0}>No digest posts yet.</p>
+  </section>
+
   <script>
-    import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
+    import { fetchCategories, fetchNews, fetchPosts, postToRow } from '../lib/api';
+    import { newsRowsHtml } from '../lib/news';
     import { CATEGORIES, CATEGORY_NAME } from '../data/site';
 
     const categoryGrid = document.getElementById('category-grid');
@@ -224,6 +245,22 @@ const categories = [...categoryMap].map(([slug, name]) => ({ slug, name }));
       if (empty) empty.hidden = tbody.rows.length > 0;
     }
 
+    async function refreshNewsSection() {
+      let entries;
+      try {
+        entries = await fetchNews();
+      } catch {
+        return; // Keep the build snapshot.
+      }
+      const tbody = document.querySelector<HTMLTableSectionElement>('#news-rows .rows tbody');
+      if (!tbody) return;
+      const limit = Number(document.getElementById('news-rows')?.getAttribute('data-limit')) || 5;
+      tbody.innerHTML = newsRowsHtml(entries, limit);
+      const empty = document.getElementById('news-empty');
+      if (empty) empty.hidden = entries.length > 0;
+    }
+
     void refreshHome();
+    void refreshNewsSection();
   </script>
 </Base>
