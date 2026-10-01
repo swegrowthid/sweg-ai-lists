@@ -5,10 +5,16 @@
 import { z } from 'astro/zod';
 
 /** Build-time override: `PUBLIC_SWEG_API_BASE=http://127.0.0.1:8080 bun run build`.
- *  Defaults to the live host so the static build works with no env set. */
+ *  Defaults to the live host so the static build works with no env set.
+ *  In `astro dev` the browser calls same-origin `/api` instead - the dev
+ *  server proxies it to this base (see astro.config.mjs), so localhost
+ *  never hits the API's CORS allowlist. Server-side code always uses the
+ *  absolute base: Node fetch needs a full URL. */
 export const API_BASE =
-  (import.meta.env?.PUBLIC_SWEG_API_BASE as string | undefined)?.replace(/\/+$/, '') ||
-  'https://api.ai-sweg.my.id';
+  !import.meta.env.SSR && import.meta.env.DEV
+    ? '/api'
+    : (import.meta.env?.PUBLIC_SWEG_API_BASE as string | undefined)?.replace(/\/+$/, '') ||
+      'https://api.ai-sweg.my.id';
 
 /** Every request is aborted after this long. Pages treat any throw as "API
  *  unavailable" and fall back to the local entries collection, so a slow or
@@ -78,6 +84,34 @@ const NewsSchema = z.object({
   updated_at: z.string(),
 });
 
+const ToolSchema = z.object({
+  /** Source-table id, PREFIX-NNN: P = providers, CA = coding-agents, ADE = ade. */
+  id: z.string(),
+  category: z.string(),
+  name: z.string(),
+  /** Empty string when the source cell is not a link. */
+  website: z.string(),
+  website_label: z.string(),
+  status: z.string(),
+  /** YYYY-MM-DD calendar date from the source table, or raw text if exotic. */
+  updated: z.string(),
+  /** Providers only. */
+  top_up: z.boolean().optional(),
+  subscribe: z.boolean().optional(),
+  min_spend: z.string().optional(),
+  /** ADE only: entries from the source "AI Features" cell. */
+  ai_features: z.array(z.string()).optional(),
+});
+
+const ToolCategorySchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  prefix: z.string(),
+  source_file: z.string(),
+  source_url: z.string(),
+  count: z.number(),
+});
+
 const TokenPairSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
@@ -98,6 +132,8 @@ export type ApiCategory = z.infer<typeof CategorySchema>;
 export type ApiPostItem = z.infer<typeof PostItemSchema>;
 export type ApiPost = z.infer<typeof PostSchema>;
 export type ApiNews = z.infer<typeof NewsSchema>;
+export type ApiTool = z.infer<typeof ToolSchema>;
+export type ApiToolCategory = z.infer<typeof ToolCategorySchema>;
 export type TokenPair = z.infer<typeof TokenPairSchema>;
 export type ApiUser = z.infer<typeof UserSchema>;
 export type ItemKind = ApiPostItem['kind'];
@@ -126,6 +162,8 @@ export interface ApiRow {
   title: string;
   summary: string;
   category: string;
+  /** Display text for the category cell; defaults to CATEGORY_NAME/category. */
+  categoryLabel?: string;
   /** Overrides the default `/s/<category>` link - news points at `/news`. */
   categoryHref?: string;
   author: string;
@@ -223,6 +261,28 @@ export async function fetchPost(slug: string, fetchImpl?: FetchLike): Promise<Ap
  *  by daily sync, so callers only ever GET it. */
 export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
   return toRows(NewsSchema, await apiFetch<unknown>('/news', { fetchImpl }), '/news');
+}
+
+export interface ToolQuery {
+  /** Category slug (or id prefix, case-insensitive on the API side). */
+  category?: string;
+  /** Case-insensitive substring of the tool name. */
+  q?: string;
+}
+
+/** Full tools snapshot - the API has no pagination params, it returns the whole
+ *  catalog in category-then-source order. Paging happens client-side. */
+export async function fetchTools(query: ToolQuery = {}, fetchImpl?: FetchLike): Promise<ApiTool[]> {
+  const params = new URLSearchParams();
+  if (query.category) params.set('category', query.category);
+  if (query.q) params.set('q', query.q);
+  const search = params.toString();
+  const path = search ? `/tools?${search}` : '/tools';
+  return toRows(ToolSchema, await apiFetch<unknown>(path, { fetchImpl }), '/tools');
+}
+
+export async function fetchToolCategories(fetchImpl?: FetchLike): Promise<ApiToolCategory[]> {
+  return toRows(ToolCategorySchema, await apiFetch<unknown>('/tools/categories', { fetchImpl }), '/tools/categories');
 }
 
 export async function fetchUsers(token: string, fetchImpl?: FetchLike): Promise<ApiUser[]> {
@@ -350,6 +410,25 @@ export function newsDate(entry: ApiNews): string {
 
 export const NEWS_SOURCE = 'zainfathoni.com';
 
+/** `updated` is a YYYY-MM-DD calendar date: pin UTC like newsDate. Exotic
+ *  formats the parser cannot read fall back to the raw source text. */
+export function toolDate(tool: ApiTool): string {
+  const parsed = new Date(tool.updated);
+  if (Number.isNaN(+parsed)) return tool.updated;
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+/** Domain line under the name: the site label, then whatever the category's
+ *  extra columns say (provider terms, ADE feature list). */
+export function toolSummary(tool: ApiTool): string {
+  const parts = [tool.website_label];
+  if (tool.top_up) parts.push('top up');
+  if (tool.subscribe) parts.push('subscribe');
+  if (tool.min_spend) parts.push(`min ${tool.min_spend}`);
+  if (tool.ai_features?.length) parts.push(tool.ai_features.join(', '));
+  return parts.filter(Boolean).join(' · ');
+}
+
 /** A news entry as an EntryRows row. Title links straight out to the source
  *  post; the category slot points back to `/news` instead of a `/s/` shelf. */
 export function newsToRow(entry: ApiNews): ApiRow {
@@ -365,6 +444,38 @@ export function newsToRow(entry: ApiNews): ApiRow {
     attrs: {
       'data-kind': 'news',
       'data-text': `${entry.title} ${entry.summary}`.toLowerCase(),
+    },
+  };
+}
+
+/** Display names for the three fixed tool categories (slug -> label). The
+ *  /tools filter select is hardcoded to these plus "all". */
+export const TOOL_CATEGORY_NAME: Record<string, string> = {
+  providers: 'Providers',
+  'coding-agents': 'Coding Agents',
+  ade: 'AI Dev Environment',
+};
+
+/** A tool as an EntryRows row. Title links out to the tool's website; the
+ *  category slot links back to `/tools` pre-filtered; `data-tool-id` is the
+ *  cursor key for load-more pagination. */
+export function toolToRow(tool: ApiTool, categoryLabel?: string): ApiRow {
+  const summary = toolSummary(tool);
+  return {
+    url: tool.website,
+    title: tool.name,
+    summary,
+    category: tool.category,
+    categoryLabel,
+    categoryHref: `/tools/?category=${encodeURIComponent(tool.category)}`,
+    author: tool.status,
+    display: 'tool',
+    date: toolDate(tool),
+    attrs: {
+      'data-kind': 'tool',
+      'data-tool-id': tool.id,
+      'data-category': tool.category,
+      'data-text': tool.name.toLowerCase(),
     },
   };
 }

@@ -34,6 +34,7 @@ export const CATEGORY_NAME: Record<string, string> = Object.fromEntries(
 export const NAV: { href: string; label: string; badge?: boolean; auth?: 'in' | 'out' }[] = [
   { href: '/submit', label: 'post an entry', auth: 'in' },
   { href: '/news', label: 'news' },
+  { href: '/tools', label: 'ai tools' },
   { href: '/wanted', label: 'wanted', badge: true },
   { href: '/search', label: 'search' },
   { href: '/help', label: 'how it works' },
