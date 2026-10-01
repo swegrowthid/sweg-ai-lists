@@ -6,6 +6,8 @@ interface Row {
   title: string;
   summary: string;
   category: string;
+  /** Where the category cell links; defaults to `/s/<category>`. */
+  categoryHref?: string;
   /** What renders in the "who" column: the author. */
   author: string;
   /** What renders in the price cell: "free" or "$X". */
@@ -36,7 +38,7 @@ const { rows, limit } = Astro.props;
             {row.summary && row.summary !== row.title ? <span class="entry-summary">{row.summary}</span> : null}
           </td>
           <td class="c category-cell">
-            <a href={`/s/${row.category}`}>{CATEGORY_NAME[row.category] ?? row.category}</a>
+            <a href={row.categoryHref ?? `/s/${row.category}`}>{CATEGORY_NAME[row.category] ?? row.category}</a>
           </td>
           <td class="c author-cell">{row.author}</td>
           <td class="p">

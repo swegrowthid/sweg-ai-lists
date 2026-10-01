@@ -1,0 +1,50 @@
+---
+import Base from '../layouts/Base.astro';
+import EntryRows from '../components/EntryRows.astro';
+import { fetchNews, newsToRow } from '../lib/api';
+import type { ApiNews } from '../lib/api';
+
+let entries: ApiNews[] = [];
+try {
+  entries = await fetchNews();
+} catch {
+  entries = [];
+}
+const rows = entries.map(newsToRow);
+---
+
+<Base title="news" crumb="news">
+  <header class="page-head">
+    <p class="eyebrow">ai tools digest</p>
+    <h1>News</h1>
+    <p class="lede">
+      The weekly AI Tools Digest from <a href="https://www.zainfathoni.com/blog">zainfathoni.com</a>, synced daily.
+      Titles link out to the original post.
+    </p>
+  </header>
+  <div id="news-rows">
+    <EntryRows rows={rows} />
+  </div>
+  <p class="empty-state" id="news-empty" hidden={rows.length > 0}>No digest posts yet. Check back soon.</p>
+
+  <script>
+    import { fetchNews } from '../lib/api';
+    import { newsRowsHtml } from '../lib/news';
+
+    async function refreshNews() {
+      let entries;
+      try {
+        entries = await fetchNews();
+      } catch {
+        return; // Keep the build snapshot.
+      }
+      const tbody = document.querySelector<HTMLTableSectionElement>('#news-rows .rows tbody');
+      if (!tbody) return;
+      tbody.innerHTML = newsRowsHtml(entries);
+      const empty = document.getElementById('news-empty');
+      if (empty) empty.hidden = entries.length > 0;
+    }
+
+    void refreshNews();
+  </script>
+</Base>

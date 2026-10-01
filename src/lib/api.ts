@@ -65,6 +65,19 @@ const PostSchema = z.object({
   updated_at: z.string(),
 });
 
+const NewsSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  /** External link to the source post; news has no local detail page. */
+  url: z.string(),
+  /** May be the empty string - rows then render title only. */
+  summary: z.string(),
+  /** Midnight UTC of the source card's date; treat as a date, not an instant. */
+  published_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
 const TokenPairSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
@@ -84,6 +97,7 @@ const UserSchema = z.object({
 export type ApiCategory = z.infer<typeof CategorySchema>;
 export type ApiPostItem = z.infer<typeof PostItemSchema>;
 export type ApiPost = z.infer<typeof PostSchema>;
+export type ApiNews = z.infer<typeof NewsSchema>;
 export type TokenPair = z.infer<typeof TokenPairSchema>;
 export type ApiUser = z.infer<typeof UserSchema>;
 export type ItemKind = ApiPostItem['kind'];
@@ -112,6 +126,8 @@ export interface ApiRow {
   title: string;
   summary: string;
   category: string;
+  /** Overrides the default `/s/<category>` link - news points at `/news`. */
+  categoryHref?: string;
   author: string;
   display: string;
   date: string;
@@ -201,6 +217,12 @@ export async function fetchPosts(query: PostQuery = {}, fetchImpl?: FetchLike): 
 export async function fetchPost(slug: string, fetchImpl?: FetchLike): Promise<ApiPost> {
   const path = `/posts/${encodeURIComponent(slug)}`;
   return toOne(PostSchema, await apiFetch<unknown>(path, { fetchImpl }), path);
+}
+
+/** Public digest feed, newest `published_at` first. Read-only: the API fills it
+ *  by daily sync, so callers only ever GET it. */
+export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
+  return toRows(NewsSchema, await apiFetch<unknown>('/news', { fetchImpl }), '/news');
 }
 
 export async function fetchUsers(token: string, fetchImpl?: FetchLike): Promise<ApiUser[]> {
@@ -314,6 +336,35 @@ export function postToRow(post: ApiPost): ApiRow {
       'data-kind': 'post',
       'data-category': category,
       'data-text': `${post.title} ${summary}`.toLowerCase(),
+    },
+  };
+}
+
+/** `published_at` is midnight UTC, a calendar date: pin UTC so the rendered
+ *  "Sep 27" cannot shift a day between server build and browser timezone. */
+export function newsDate(entry: ApiNews): string {
+  const published = new Date(entry.published_at);
+  if (Number.isNaN(+published)) return '';
+  return published.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+export const NEWS_SOURCE = 'zainfathoni.com';
+
+/** A news entry as an EntryRows row. Title links straight out to the source
+ *  post; the category slot points back to `/news` instead of a `/s/` shelf. */
+export function newsToRow(entry: ApiNews): ApiRow {
+  return {
+    url: entry.url,
+    title: entry.title,
+    summary: entry.summary,
+    category: 'digest',
+    categoryHref: '/news',
+    author: NEWS_SOURCE,
+    display: 'news',
+    date: newsDate(entry),
+    attrs: {
+      'data-kind': 'news',
+      'data-text': `${entry.title} ${entry.summary}`.toLowerCase(),
     },
   };
 }
