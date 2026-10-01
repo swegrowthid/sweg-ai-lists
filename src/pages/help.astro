@@ -23,6 +23,21 @@ npx swegai verify commit-writer</pre>
   <h2>use a setting</h2>
   <pre>copy the setting text from the entry page
 paste it as your system prompt</pre>
+  <h2>find an entry</h2>
+  <p><a href="/">Home</a> shows browse by category, recently added, and the AI tools digest. Each section links to its full page.</p>
+  <p><a href="/search">Search</a> filters the full catalog by words, kind (skill, setting, post), and category. The full list ships in the page. The filter runs in the browser. It works from the URL, so back and forward keep the view.</p>
+  <p>Category pages at <code>/s/&lt;slug&gt;</code> list local entries plus live API posts in that category. Newest sorts first. An empty category shows an empty state.</p>
+  <p>Entry pages at <code>/entry/&lt;slug&gt;</code> show the full text, install command for skills, target and model for settings, and before and after examples. API posts load live in the browser. The owner sees a delete action. A post made after the last build still opens through search or the <code>/entry/?s=</code> view. Unknown paths show the 404 page, which also mounts <code>/entry/&lt;new-slug&gt;</code> when the host serves it.</p>
+  <p><a href="/wanted">Wanted</a> lists ideas the community wants built. Each row links to <a href="/submit">submit</a>. <a href="/about">About</a> states the goal in three lines.</p>
+  <h2>new: news and ai tools</h2>
+  <p><a href="/news">News</a> is the weekly AI Tools Digest from zainfathoni.com, synced daily. Titles link out to the source post. The page ships a build snapshot, then refreshes in the browser. If the API is down, the snapshot stays.</p>
+  <p><a href="/tools">AI tools</a> is the tools catalog, synced daily from <a href="https://github.com/swegrowthid/tools-ai-swe-growth">tools-ai-swe-growth</a>. It covers providers, coding agents, and ADE dev environments. Filter by name and category. Results page client-side, 50 at a time, with a load more button. The count line shows visible of matched tools. No JavaScript still shows the first 50.</p>
+  <h2>post an entry</h2>
+  <p><a href="/submit">Submit</a> posts straight to the live API and opens right away. Log in first. Pick the item kind: markdown, text, link, or file. The form shows only the fields that kind owns. A post can hold up to 20 items through the API. This form posts one.</p>
+  <p>Prefer git? Contribute by pull request: write <code>src/content/entries/your-slug.md</code>, match the schema shown on the submit page, and open a PR.</p>
+  <h2>accounts</h2>
+  <p><a href="/register">Register</a> creates the account, then logs in at once so the browser holds the token pair. <a href="/login">Log in</a> accepts username or email and stores the token in this browser only. That token is what submit posts with.</p>
+  <p><a href="/profile">Profile</a> paints identity from the token first, then loads email and member since from the API. It tells guest apart from expired: guest never logged in, expired had a token that refresh rejected. <a href="/change-password">Change password</a> signs out every device and sends you back to log in with the new password. Log out clears the browser token and returns home. Gated links start hidden and reveal only when a token exists.</p>
   <h2>review bar</h2>
   <ul>
     <li>human review: every entry is read by a person before it lists</li>
