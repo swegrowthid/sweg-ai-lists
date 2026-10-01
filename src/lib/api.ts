@@ -326,6 +326,21 @@ export async function logout(refreshToken: string, fetchImpl?: FetchLike): Promi
   await apiFetch<void>('/auth/logout', { method: 'POST', body: { refresh_token: refreshToken }, fetchImpl });
 }
 
+/** Changes the password; the API revokes all refresh tokens. Responds 204. */
+export async function updatePassword(
+  currentPassword: string,
+  newPassword: string,
+  token: string,
+  fetchImpl?: FetchLike,
+): Promise<void> {
+  await apiFetch<void>('/users/password', {
+    method: 'PUT',
+    body: { current_password: currentPassword, new_password: newPassword },
+    token,
+    fetchImpl,
+  });
+}
+
 // --- writes ------------------------------------------------------------------
 
 export async function createPost(input: CreatePostInput, token: string, fetchImpl?: FetchLike): Promise<ApiPost> {

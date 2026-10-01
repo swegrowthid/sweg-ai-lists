@@ -24,6 +24,7 @@ import Base from '../layouts/Base.astro';
     </div>
     <p class="alt">Don't have an account? <a href="/register">sign up</a></p>
     <p class="alt muted" id="state"></p>
+    <p class="small" id="changed" hidden></p>
   </div>
 
   <script>
@@ -99,6 +100,14 @@ import Base from '../layouts/Base.astro';
         }
       }
     });
+
+    // Fixed string only: the query value is never rendered, so ?changed=1
+    // cannot inject markup here.
+    if (new URLSearchParams(location.search).get('changed') === '1') {
+      const changed = byId<HTMLParagraphElement>('changed');
+      changed.textContent = 'password changed - log in with your new password.';
+      changed.hidden = false;
+    }
 
     renderState();
   </script>
