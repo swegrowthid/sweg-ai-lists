@@ -73,20 +73,26 @@ for (const cat of apiCategories) {
     <p class="lede">Filter community skills and settings by words, kind, or category.</p>
   </header>
   <form class="searchbar" method="get" action="/search">
-    <label class="inline" for="q">words</label>
-    <input type="text" id="q" name="q" />
-    <label class="inline" for="kind">kind</label>
-    <select id="kind" name="kind">
-      <option value="">any</option>
-      <option value="skill">skill</option>
-      <option value="setting">setting</option>
-      <option value="post">post</option>
-    </select>
-    <label class="inline" for="category">category</label>
-    <select id="category" name="category">
-      <option value="">any</option>
-      {catOptions.map((c) => <option value={c.slug}>{c.name}</option>)}
-    </select>
+    <div class="field">
+      <label class="inline" for="q">words</label>
+      <input type="text" id="q" name="q" />
+    </div>
+    <div class="field">
+      <label class="inline" for="kind">kind</label>
+      <select id="kind" name="kind">
+        <option value="">any</option>
+        <option value="skill">skill</option>
+        <option value="setting">setting</option>
+        <option value="post">post</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="inline" for="category">category</label>
+      <select id="category" name="category">
+        <option value="">any</option>
+        {catOptions.map((c) => <option value={c.slug}>{c.name}</option>)}
+      </select>
+    </div>
     <button type="submit">search</button>
   </form>
 

@@ -112,6 +112,25 @@ const ToolCategorySchema = z.object({
   count: z.number(),
 });
 
+/** Paging metadata the server applies to a list page. */
+const PageMetaSchema = z.object({
+  /** 1-based page number being served. */
+  page: z.number(),
+  /** Page size the server applied, after its own cap. */
+  per_page: z.number(),
+  /** Rows matching the filter across every page. */
+  total: z.number(),
+  /** Pages `total` makes at `per_page`; 0 when nothing matched. */
+  total_pages: z.number(),
+});
+
+const ToolListSchema = z.object({
+  /** Rows are parsed one by one in fetchTools, so a single bad row never
+   *  costs the client the whole page. */
+  data: z.array(z.unknown()),
+  meta: PageMetaSchema,
+});
+
 const TokenPairSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
@@ -134,6 +153,13 @@ export type ApiPost = z.infer<typeof PostSchema>;
 export type ApiNews = z.infer<typeof NewsSchema>;
 export type ApiTool = z.infer<typeof ToolSchema>;
 export type ApiToolCategory = z.infer<typeof ToolCategorySchema>;
+export type ApiPageMeta = z.infer<typeof PageMetaSchema>;
+
+/** One page of the tools catalog plus the paging metadata for the rest. */
+export interface ApiToolPage {
+  data: ApiTool[];
+  meta: ApiPageMeta;
+}
 export type TokenPair = z.infer<typeof TokenPairSchema>;
 export type ApiUser = z.infer<typeof UserSchema>;
 export type ItemKind = ApiPostItem['kind'];
@@ -264,21 +290,39 @@ export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
 }
 
 export interface ToolQuery {
-  /** Category slug (or id prefix, case-insensitive on the API side). */
+  /** Group name: all, provider, coding-agent or ade. The source slugs and id
+   *  prefixes (providers, coding-agents, p, ca, ...) resolve to the same rows. */
+  group?: string;
+  /** Older spelling of `group`; the API still reads it. */
   category?: string;
   /** Case-insensitive substring of the tool name. */
   q?: string;
+  /** Sort key: `name` or `updated`. Empty keeps the source catalog order. */
+  sort?: string;
+  /** Sort direction, `asc` or `desc`. Only read when `sort` is set. */
+  order?: string;
+  /** 1-based page number. */
+  page?: number;
+  /** Rows per page. The API rejects anything above 100. */
+  perPage?: number;
 }
 
-/** Full tools snapshot - the API has no pagination params, it returns the whole
- *  catalog in category-then-source order. Paging happens client-side. */
-export async function fetchTools(query: ToolQuery = {}, fetchImpl?: FetchLike): Promise<ApiTool[]> {
+/** One page of the tools catalog. The server does the grouping, sorting and
+ *  paging; `meta` counts every row the filter matches, not just this page, so a
+ *  caller can drive a pager without a second request. */
+export async function fetchTools(query: ToolQuery = {}, fetchImpl?: FetchLike): Promise<ApiToolPage> {
   const params = new URLSearchParams();
+  if (query.group) params.set('group', query.group);
   if (query.category) params.set('category', query.category);
   if (query.q) params.set('q', query.q);
+  if (query.sort) params.set('sort', query.sort);
+  if (query.order) params.set('order', query.order);
+  if (query.page) params.set('page', String(query.page));
+  if (query.perPage) params.set('per_page', String(query.perPage));
   const search = params.toString();
   const path = search ? `/tools?${search}` : '/tools';
-  return toRows(ToolSchema, await apiFetch<unknown>(path, { fetchImpl }), '/tools');
+  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl }), '/tools');
+  return { data: toRows(ToolSchema, raw.data, '/tools'), meta: raw.meta };
 }
 
 export async function fetchToolCategories(fetchImpl?: FetchLike): Promise<ApiToolCategory[]> {
@@ -471,9 +515,16 @@ export const TOOL_CATEGORY_NAME: Record<string, string> = {
   ade: 'AI Dev Environment',
 };
 
+/** Group query value for each source category slug. The API reads a slug and a
+ *  short group name alike; the /tools URL and its select use the short one. */
+export const TOOL_GROUP_VALUE: Record<string, string> = {
+  providers: 'provider',
+  'coding-agents': 'coding-agent',
+  ade: 'ade',
+};
+
 /** A tool as an EntryRows row. Title links out to the tool's website; the
- *  category slot links back to `/tools` pre-filtered; `data-tool-id` is the
- *  cursor key for load-more pagination. */
+ *  category slot links back to `/tools` pre-filtered to that group. */
 export function toolToRow(tool: ApiTool, categoryLabel?: string): ApiRow {
   const summary = toolSummary(tool);
   return {
@@ -482,7 +533,7 @@ export function toolToRow(tool: ApiTool, categoryLabel?: string): ApiRow {
     summary,
     category: tool.category,
     categoryLabel,
-    categoryHref: `/tools/?category=${encodeURIComponent(tool.category)}`,
+    categoryHref: `/tools/?group=${encodeURIComponent(TOOL_GROUP_VALUE[tool.category] ?? tool.category)}`,
     author: tool.status,
     display: 'tool',
     date: toolDate(tool),

@@ -1,22 +1,42 @@
 ---
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
-import { fetchTools, toolToRow, TOOL_CATEGORY_NAME } from '../lib/api';
-import type { ApiTool } from '../lib/api';
+import { fetchTools, toolToRow, TOOL_CATEGORY_NAME, TOOL_GROUP_VALUE } from '../lib/api';
+import type { ApiToolPage, ToolQuery } from '../lib/api';
 
-let tools: ApiTool[] = [];
-try {
-  tools = await fetchTools();
-} catch {
-  tools = [];
+/** Rows per request. The API rejects a `per_page` above 100. */
+const PAGE_SIZE = 50;
+
+/** The URL is the whole query state. The form is a plain GET, so a link to
+ *  `/tools?group=provider&sort=updated&order=desc` renders exactly that list. */
+function readQuery(source: URLSearchParams): ToolQuery {
+  const page = Number(source.get('page') ?? '1');
+  const group = source.get('group') ?? source.get('category') ?? '';
+  return {
+    q: source.get('q') ?? '',
+    group: TOOL_GROUP_VALUE[group] ?? group,
+    sort: source.get('sort') ?? '',
+    order: source.get('order') ?? '',
+    page: Number.isInteger(page) && page > 0 ? page : 1,
+    perPage: PAGE_SIZE,
+  };
 }
 
-const rows = tools.map((tool) => toolToRow(tool, TOOL_CATEGORY_NAME[tool.category]));
+const query = readQuery(Astro.url.searchParams);
 
-// The API returns the whole catalog in one shot, so paging is client-side:
-// rows beyond PAGE_SIZE ship hidden and a cursor on the last visible
-// data-tool-id drives "load more" - same no-JS degradation as the other lists.
-const PAGE_SIZE = 50;
+// The static build renders the default first page. The client refetches with
+// the real URL params and repaints, so a shared link shows the right list.
+let first: ApiToolPage = {
+  data: [],
+  meta: { page: 1, per_page: PAGE_SIZE, total: 0, total_pages: 0 },
+};
+try {
+  first = await fetchTools(query);
+} catch {
+  // The API is unreachable at build time. Render the shell; the client retries.
+}
+
+const rows = first.data.map((tool) => toolToRow(tool, TOOL_CATEGORY_NAME[tool.category]));
 ---
 
 <Base title="ai tools" crumb="ai tools">
@@ -24,115 +44,77 @@ const PAGE_SIZE = 50;
     <p class="eyebrow">ai tools catalog</p>
     <h1>AI Tools</h1>
     <p class="lede">
-      Providers, coding agents, and dev environments tracked by the community - synced daily from
-      <a href="https://github.com/swegrowthid/tools-ai-swe-growth">tools-ai-swe-growth</a>.
+      Providers, coding agents, and dev environments tracked by the community - synced daily from <a href="https://github.com/swegrowthid/tools-ai-swe-growth">tools-ai-swe-growth</a>.
     </p>
   </header>
+
   <form class="searchbar" method="get" action="/tools">
-    <label class="inline" for="q">name</label>
-    <input type="text" id="q" name="q" />
-    <label class="inline" for="category">category</label>
-    <select id="category" name="category">
-      <option value="">all</option>
-      <option value="providers">providers</option>
-      <option value="coding-agents">coding agents</option>
-      <option value="ade">ade</option>
-    </select>
+    <div class="field">
+      <label class="inline" for="q">name</label>
+      <input type="text" id="q" name="q" />
+    </div>
+    <div class="field">
+      <label class="inline" for="group">group</label>
+      <select id="group" name="group">
+        <option value="">all</option>
+        <option value="ade">ade</option>
+        <option value="provider">provider</option>
+        <option value="coding-agent">coding agents</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="inline" for="sort">order by</label>
+      <select id="sort" name="sort">
+        <option value="">source order</option>
+        <option value="name">name</option>
+        <option value="updated">time added</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="inline" for="order">direction</label>
+      <select id="order" name="order">
+        <option value="asc">a-z, oldest</option>
+        <option value="desc">z-a, newest</option>
+      </select>
+    </div>
     <button type="submit">filter</button>
   </form>
 
   <p class="small" id="count">{rows.length} tools</p>
 
   <div id="results">
-    <EntryRows rows={rows} limit={PAGE_SIZE} />
+    <EntryRows rows={rows} />
   </div>
 
   <p class="empty-state" id="empty" hidden>No tools to show.</p>
   <button class="category-toggle" id="load-more" type="button" hidden>load more →</button>
 
   <script>
-    import { fetchTools, toolToRow, TOOL_CATEGORY_NAME } from '../lib/api';
-    import type { ApiTool } from '../lib/api';
+    import { fetchTools, toolToRow, TOOL_CATEGORY_NAME, TOOL_GROUP_VALUE } from '../lib/api';
+    import type { ApiToolPage, ToolQuery } from '../lib/api';
 
     const PAGE = 50;
     const qInput = document.getElementById('q') as HTMLInputElement | null;
-    const catSelect = document.getElementById('category') as HTMLSelectElement | null;
+    const groupSelect = document.getElementById('group') as HTMLSelectElement | null;
+    const sortSelect = document.getElementById('sort') as HTMLSelectElement | null;
+    const orderSelect = document.getElementById('order') as HTMLSelectElement | null;
     const countEl = document.getElementById('count');
     const emptyEl = document.getElementById('empty');
     const moreBtn = document.getElementById('load-more') as HTMLButtonElement | null;
+    const tbody = document.querySelector<HTMLTableSectionElement>('#results tbody');
 
-    /** Cursor = data-tool-id of the last revealed row; '' means nothing revealed
-     *  yet, so the next reveal starts at the first matching row. */
-    let cursorId = '';
+    /** The page a "load more" click asks for next. */
+    let nextPage = 1;
 
     function esc(value: string): string {
-      return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
-    }
-
-    function allRows(): HTMLTableRowElement[] {
-      return Array.from(document.querySelectorAll<HTMLTableRowElement>('#results tbody tr'));
-    }
-
-    function matches(tr: HTMLTableRowElement, q: string, category: string): boolean {
-      return (
-        (!q || (tr.getAttribute('data-text') ?? '').includes(q)) &&
-        (!category || tr.getAttribute('data-category') === category)
+      return value.replace(
+        /[&<>"']/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
       );
     }
 
-    /** Reveal = keep the segment up to `cursorId` visible, then show up to PAGE
-     *  more matching rows and move the cursor to the new last one. */
-    function reveal() {
-      const q = (qInput?.value ?? '').trim().toLowerCase();
-      const category = catSelect?.value ?? '';
-      const rows = allRows();
-      let matched = 0;
-      let visible = 0;
-      let pastCursor = cursorId === '';
-      let pending = PAGE;
-      for (const tr of rows) {
-        if (!matches(tr, q, category)) {
-          tr.hidden = true;
-          continue;
-        }
-        matched++;
-        if (!pastCursor) {
-          tr.hidden = false;
-          visible++;
-          if (tr.getAttribute('data-tool-id') === cursorId) pastCursor = true;
-          continue;
-        }
-        if (pending > 0) {
-          tr.hidden = false;
-          visible++;
-          pending--;
-          cursorId = tr.getAttribute('data-tool-id') ?? cursorId;
-        } else {
-          tr.hidden = true;
-        }
-      }
-      if (countEl) {
-        const active = q || category;
-        const note = active ? ` matching ${[q && `"${qInput?.value.trim()}"`, category].filter(Boolean).join(' ')}` : '';
-        countEl.textContent = `${visible} of ${matched} ${matched === 1 ? 'tool' : 'tools'}${note}`;
-      }
-      if (moreBtn) moreBtn.hidden = visible >= matched;
-      if (emptyEl) {
-        emptyEl.hidden = matched > 0;
-        emptyEl.textContent = rows.length === 0 ? 'No tools yet. Check back soon.' : 'No tools match those filters.';
-      }
-    }
-
-    /** Same-document entry point: URL params drive the controls, cursor resets. */
-    function applyFilters() {
-      const params = new URLSearchParams(location.search);
-      if (qInput) qInput.value = params.get('q') ?? '';
-      if (catSelect) catSelect.value = params.get('category') ?? '';
-      cursorId = '';
-      reveal();
-    }
-
-    /** Rebuild the tbody from a fresh fetch; repaints identical EntryRows markup. */
+    /** One table row in the exact shape EntryRows renders, so a row appended by
+     *  "load more" is indistinguishable from a server-rendered one. */
     function toolRowHtml(row: ReturnType<typeof toolToRow>): string {
       const attrs = Object.entries(row.attrs)
         .map(([key, value]) => ` ${key}="${esc(value)}"`)
@@ -140,9 +122,10 @@ const PAGE_SIZE = 50;
       const title = row.url
         ? `<a class="entry-title" href="${esc(row.url)}">${esc(row.title)}</a>`
         : `<span class="entry-title">${esc(row.title)}</span>`;
-      const summary = row.summary && row.summary !== row.title ? `<span class="entry-summary">${esc(row.summary)}</span>` : '';
+      const summary =
+        row.summary && row.summary !== row.title ? `<span class="entry-summary">${esc(row.summary)}</span>` : '';
       return (
-        `<tr${attrs} hidden><td class="d">${esc(row.date)}</td>` +
+        `<tr${attrs}><td class="d">${esc(row.date)}</td>` +
         `<td class="entry-main">${title}` +
         `<span class="entry-kind">${esc(row.attrs['data-kind'] ?? row.display)}</span>${summary}</td>` +
         `<td class="c category-cell"><a href="${esc(row.categoryHref ?? `/s/${row.category}`)}">${esc(row.categoryLabel ?? row.category)}</a></td>` +
@@ -151,25 +134,74 @@ const PAGE_SIZE = 50;
       );
     }
 
-    async function refreshTools() {
-      let fresh: ApiTool[];
-      try {
-        fresh = await fetchTools();
-      } catch {
-        return; // Keep the build snapshot.
-      }
-      const tbody = document.querySelector<HTMLTableSectionElement>('#results tbody');
-      if (!tbody) return;
-      tbody.innerHTML = fresh.map((tool) => toolRowHtml(toolToRow(tool, TOOL_CATEGORY_NAME[tool.category]))).join('');
-      cursorId = '';
-      reveal();
+    /** The query the controls describe, for one page of it. */
+    function currentQuery(page: number): ToolQuery {
+      return {
+        q: (qInput?.value ?? '').trim(),
+        group: groupSelect?.value ?? '',
+        sort: sortSelect?.value ?? '',
+        order: orderSelect?.value ?? '',
+        page,
+        perPage: PAGE,
+      };
     }
 
-    moreBtn?.addEventListener('click', () => reveal());
-    // The form itself does a native GET navigation to /tools?q=&category=;
-    // applyFilters on load applies the params - same pattern as /search.
-    applyFilters();
-    void refreshTools();
-    document.addEventListener('astro:after-swap', applyFilters);
+    /** Short filter summary for the count line. Empty when nothing is filtered. */
+    function filterNote(): string {
+      const q = (qInput?.value ?? '').trim();
+      const group = groupSelect?.value ?? '';
+      const parts = [q && `"${q}"`, group].filter(Boolean).join(' ');
+      return parts ? ` matching ${parts}` : '';
+    }
+
+    /** Paint one server page. `replace` swaps the table, `append` grows it. */
+    function paint(page: ApiToolPage, mode: 'replace' | 'append'): void {
+      if (!tbody) return;
+      const html = page.data
+        .map((tool) => toolRowHtml(toolToRow(tool, TOOL_CATEGORY_NAME[tool.category])))
+        .join('');
+      if (mode === 'replace') tbody.innerHTML = html;
+      else tbody.insertAdjacentHTML('beforeend', html);
+
+      const shown = tbody.querySelectorAll('tr').length;
+      const total = page.meta.total;
+      if (countEl) {
+        countEl.textContent = `${shown} of ${total} ${total === 1 ? 'tool' : 'tools'}${filterNote()}`;
+      }
+      if (moreBtn) moreBtn.hidden = shown >= total;
+      if (emptyEl) {
+        emptyEl.hidden = total > 0;
+        emptyEl.textContent = filterNote() ? 'No tools match those filters.' : 'No tools yet. Check back soon.';
+      }
+    }
+
+    /** Fetch one page and paint it. Keeps the rows already on screen on failure. */
+    async function load(page: number, mode: 'replace' | 'append'): Promise<void> {
+      let result: ApiToolPage;
+      try {
+        result = await fetchTools(currentQuery(page));
+      } catch {
+        return;
+      }
+      nextPage = page + 1;
+      paint(result, mode);
+    }
+
+    /** Put the URL's query into the controls, then load page one from the API. */
+    function boot(): void {
+      const params = new URLSearchParams(location.search);
+      const group = params.get('group') ?? params.get('category') ?? '';
+      if (qInput) qInput.value = params.get('q') ?? '';
+      if (groupSelect) groupSelect.value = TOOL_GROUP_VALUE[group] ?? group;
+      if (sortSelect) sortSelect.value = params.get('sort') ?? '';
+      if (orderSelect) orderSelect.value = params.get('order') ?? '';
+      const page = Number(params.get('page') ?? '1');
+      void load(Number.isInteger(page) && page > 0 ? page : 1, 'replace');
+    }
+
+    moreBtn?.addEventListener('click', () => void load(nextPage, 'append'));
+    // The form is a plain GET to /tools; boot applies its params after the load.
+    boot();
+    document.addEventListener('astro:after-swap', boot);
   </script>
 </Base>

@@ -179,9 +179,14 @@ main { min-height: 55vh; }
 .page-head .lede { margin-bottom: 0; font-size: 1rem; }
 
 /* Search */
-.searchbar { display: grid; grid-template-columns: auto minmax(140px, 1fr) auto minmax(120px, .7fr) auto minmax(150px, .9fr) auto; align-items: center; gap: 8px; margin: 20px 0 12px; padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+.searchbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: center; gap: 10px 12px; margin: 20px 0 12px; padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
 .searchbar label { color: var(--muted); font-size: .82rem; font-weight: 600; }
 .searchbar input, .searchbar select { min-width: 0; width: 100%; }
+/* One label and its control per grid item, so a bar with any number of
+   controls never splits a label away from the field it names. */
+.searchbar .field { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.searchbar .field > label { flex: 0 0 auto; }
+.searchbar .field > input, .searchbar .field > select { flex: 1 1 0; }
 .searchbar button, .form button[type="submit"] { padding: 8px 13px; border: 0; border-radius: 7px; background: var(--accent); color: #fff; font-weight: 650; }
 .searchbar button:hover, .form button[type="submit"]:hover, .button-primary:hover { background: var(--accent-hover); }
 html[data-theme="dark"] .searchbar button, html[data-theme="dark"] .form button[type="submit"], html[data-theme="dark"] .button-primary { color: #10251b; }
@@ -267,8 +272,8 @@ li { margin: 5px 0; }
   .home-hero { grid-template-columns: 1fr; gap: 20px; }
   .hero-search { max-width: 540px; }
   .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .searchbar { grid-template-columns: auto minmax(0, 1fr); }
-  .searchbar button { grid-column: 2; justify-self: start; }
+  .searchbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .searchbar button { grid-column: 1 / -1; justify-self: start; }
 }
 
 @media (max-width: 600px) {
@@ -308,7 +313,7 @@ li { margin: 5px 0; }
   .rows .c, .rows .p { margin-right: 9px; font-size: .72rem; }
   .rows .p { text-align: left; }
   .searchbar { grid-template-columns: 1fr; gap: 5px; padding: 12px; }
-  .searchbar label { margin-top: 5px; }
+  .searchbar .field { margin-top: 5px; }
   .searchbar button { grid-column: auto; }
   .compare { flex-direction: column; gap: 4px; }
   .example { padding: 11px; }
