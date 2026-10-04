@@ -13,10 +13,6 @@ import Base from '../layouts/Base.astro';
     You are not logged in. <a href="/login">log in</a> or <a href="/register">register</a>.
   </p>
 
-  <p id="expired" hidden>
-    Session expired. <a href="/login">log in</a> again to keep posting.
-  </p>
-
   <div class="box" id="card" hidden>
     <div class="who">
       <span class="avatar" id="avatar-initial" aria-hidden="true">?</span>
@@ -40,7 +36,7 @@ import Base from '../layouts/Base.astro';
 
   <script>
     import { ApiError, fetchUsers } from '../lib/api';
-    import { claims, clearPair, ensurePair, logoutSession, storedPair } from '../lib/session';
+    import { claims, ensurePair, handleExpiredSession, isTokenExpired, logoutSession, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
@@ -53,8 +49,12 @@ import Base from '../layouts/Base.astro';
       const c = pair ? claims(pair.access_token) : null;
       byId<HTMLParagraphElement>('checking').hidden = true;
       if (!pair || !c?.sub) {
-        // Tokens existed but died (refresh rejected) -> expired, not guest.
-        byId<HTMLParagraphElement>(hadTokens ? 'expired' : 'guest').hidden = false;
+        // Tokens existed but died (refresh rejected) -> must log in again.
+        if (hadTokens) {
+          handleExpiredSession();
+          return;
+        }
+        byId<HTMLParagraphElement>('guest').hidden = false;
         return;
       }
 
@@ -81,10 +81,9 @@ import Base from '../layouts/Base.astro';
           ? me.created_at
           : since.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          clearPair();
-          card.hidden = true;
-          byId<HTMLParagraphElement>('expired').hidden = false;
+        // A dead token must log in again; the redirect clears the pair.
+        if (isTokenExpired(error)) {
+          handleExpiredSession();
           return;
         }
         // Partial: the card still proves login; only the server fields are missing.

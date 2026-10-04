@@ -3,7 +3,7 @@
  *  Shared by pages that need to know who is logged in (profile, submit,
  *  post detail delete action). Nothing here renders. */
 
-import { logout, refresh } from './api';
+import { ApiError, logout, refresh } from './api';
 import type { TokenPair } from './api';
 
 export const TOKEN_KEY = 'sweg-ai-tokens';
@@ -64,4 +64,25 @@ export async function ensurePair(): Promise<TokenPair | null> {
   } catch {
     return null;
   }
+}
+
+/** A 401 that kills the session: the API rejected the token itself (expired
+ *  or revoked). A credential answer - "invalid credentials", "current password
+ *  is incorrect" - keeps the session; that message is the caller's to show. */
+export function isTokenExpired(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 401) return false;
+  const reason = error.message.toLowerCase();
+  return !(reason.includes('password') || reason.includes('credential'));
+}
+
+/** Best practice for a dead token: drop it and force a fresh login. Sends the
+ *  browser once to /login?expired=1 with `next` for the return trip. Stays put
+ *  on the login page itself, so the form can never loop. */
+let expiryRedirecting = false;
+export function handleExpiredSession(): void {
+  clearPair();
+  if (expiryRedirecting || location.pathname.startsWith('/login')) return;
+  expiryRedirecting = true;
+  const here = `${location.pathname}${location.search}`;
+  location.assign(`/login?expired=1${here === '/' ? '' : `&next=${encodeURIComponent(here)}`}`);
 }

@@ -87,7 +87,7 @@ instead of install.</pre>
   <script>
     import { ApiError, createPost, fetchCategories } from '../lib/api';
     import type { CreatePostInput, ItemKind } from '../lib/api';
-    import { ensurePair, storedPair } from '../lib/session';
+    import { ensurePair, handleExpiredSession, isTokenExpired, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
@@ -167,8 +167,14 @@ instead of install.</pre>
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const hadTokens = !!storedPair();
       const token = (await ensurePair())?.access_token;
       if (!token) {
+        // Tokens existed but died (refresh rejected) -> must log in again.
+        if (hadTokens) {
+          handleExpiredSession();
+          return;
+        }
         setStatus('not logged in — log in first.', 'small err');
         return;
       }
@@ -179,15 +185,17 @@ instead of install.</pre>
         location.href = `/entry/?s=${encodeURIComponent(post.slug)}`;
         return;
       } catch (error) {
+        // A dead token must log in again; the redirect clears the pair.
+        if (isTokenExpired(error)) {
+          handleExpiredSession();
+          return;
+        }
         // ApiError carries the API's text/plain reason; anything else means the request
         // never landed (offline, or the API's CORS policy blocking this origin).
-        const expired = error instanceof ApiError && error.status === 401;
         setStatus(
-          expired
-            ? 'session expired — log in again.'
-            : error instanceof ApiError
-              ? error.message
-              : 'could not reach the API from this page — use the PR route below.',
+          error instanceof ApiError
+            ? error.message
+            : 'could not reach the API from this page — use the PR route below.',
           'small err',
         );
       }

@@ -6,7 +6,7 @@
 import { SITE } from '../data/site';
 import { ApiError, deletePost, fetchPost, postSummary } from './api';
 import type { ApiPost, ApiPostItem } from './api';
-import { claims, clearPair, ensurePair, storedPair } from './session';
+import { claims, clearPair, ensurePair, handleExpiredSession, isTokenExpired, storedPair } from './session';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -106,16 +106,19 @@ async function deleteFlow(slug: string, line: HTMLElement): Promise<void> {
   // A dead access token gets one silent refresh before the call.
   const pair = await ensurePair();
   if (!pair?.access_token) {
-    line.textContent = 'session expired - ';
-    const a = el('a', undefined, 'log in');
-    a.href = '/login';
-    line.append(a, ' again.');
+    // The delete button renders only for a logged-in owner, so a dead pair
+    // here is always an expired session: clear it and force a fresh login.
+    handleExpiredSession();
     return;
   }
   try {
     await deletePost(slug, pair.access_token);
     location.href = '/';
   } catch (error) {
+    if (isTokenExpired(error)) {
+      handleExpiredSession();
+      return;
+    }
     line.textContent =
       error instanceof ApiError && error.status === 403
         ? 'only the author can delete this post.'
