@@ -25,6 +25,7 @@ import Base from '../layouts/Base.astro';
     <p class="alt">Don't have an account? <a href="/register">sign up</a></p>
     <p class="alt muted" id="state"></p>
     <p class="small" id="changed" hidden></p>
+    <p class="small" id="expired" hidden></p>
   </div>
 
   <script>
@@ -48,6 +49,21 @@ import Base from '../layouts/Base.astro';
         return JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null');
       } catch {
         return null;
+      }
+    }
+
+    const params = new URLSearchParams(location.search);
+
+    // Only same-origin return paths: a crafted ?next= must not send the
+    // freshly logged-in user off-site.
+    function nextPath(): string {
+      const raw = params.get('next');
+      if (!raw) return '/';
+      try {
+        const url = new URL(raw, location.origin);
+        return url.origin === location.origin ? `${url.pathname}${url.search}` : '/';
+      } catch {
+        return '/';
       }
     }
 
@@ -83,7 +99,7 @@ import Base from '../layouts/Base.astro';
           byId<HTMLInputElement>('password').value,
         );
         localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        location.href = '/';
+        location.href = nextPath();
       } catch (error) {
         status.className = 'small err';
         // ApiError carries the API's text/plain reason; anything else means the request
@@ -101,12 +117,17 @@ import Base from '../layouts/Base.astro';
       }
     });
 
-    // Fixed string only: the query value is never rendered, so ?changed=1
-    // cannot inject markup here.
-    if (new URLSearchParams(location.search).get('changed') === '1') {
+    // Fixed strings only: query values are never rendered, so ?changed=1 and
+    // ?expired=1 cannot inject markup here.
+    if (params.get('changed') === '1') {
       const changed = byId<HTMLParagraphElement>('changed');
       changed.textContent = 'password changed - log in with your new password.';
       changed.hidden = false;
+    }
+    if (params.get('expired') === '1') {
+      const expired = byId<HTMLParagraphElement>('expired');
+      expired.textContent = 'your session expired - log in again to continue.';
+      expired.hidden = false;
     }
 
     renderState();
