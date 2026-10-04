@@ -40,6 +40,7 @@ import Base from '../layouts/Base.astro';
 
   <script>
     import { ApiError, fetchUsers } from '../lib/api';
+    import { goInternal } from '../lib/nav';
     import { claims, clearPair, ensurePair, logoutSession, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
@@ -68,7 +69,7 @@ import Base from '../layouts/Base.astro';
 
       byId<HTMLButtonElement>('logout').addEventListener('click', () => {
         logoutSession();
-        location.href = '/';
+        goInternal('/');
       });
 
       try {
@@ -88,8 +89,8 @@ import Base from '../layouts/Base.astro';
           return;
         }
         // Partial: the card still proves login; only the server fields are missing.
-        byId('f-email').textContent = '—';
-        byId('f-since').textContent = '—';
+        byId('f-email').textContent = '-';
+        byId('f-since').textContent = '-';
         const note = byId<HTMLParagraphElement>('details-note');
         note.textContent = 'could not load account details from the API - showing what the token holds.';
         note.hidden = false;

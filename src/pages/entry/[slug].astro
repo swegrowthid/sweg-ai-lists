@@ -110,7 +110,7 @@ const dateStr = data
           await navigator.clipboard.writeText(button.dataset.copy ?? '');
           if (status) status.textContent = 'Copied.';
         } catch {
-          if (status) status.textContent = 'Copy unavailable — select the command above.';
+          if (status) status.textContent = 'Copy unavailable - select the command above.';
         }
       });
     });

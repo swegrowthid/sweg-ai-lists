@@ -30,6 +30,7 @@ import Base from '../layouts/Base.astro';
   <script>
     import { ApiError, login } from '../lib/api';
     import type { TokenPair } from '../lib/api';
+    import { goInternal } from '../lib/nav';
     import { logoutSession } from '../lib/session';
 
     const TOKEN_KEY = 'sweg-ai-tokens';
@@ -61,7 +62,7 @@ import Base from '../layouts/Base.astro';
       out.textContent = 'log out';
       out.addEventListener('click', () => {
         logoutSession();
-        location.href = '/';
+        goInternal('/');
       });
       state.append(out);
       state.append(' · ');
@@ -83,7 +84,7 @@ import Base from '../layouts/Base.astro';
           byId<HTMLInputElement>('password').value,
         );
         localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        location.href = '/';
+        goInternal('/');
       } catch (error) {
         status.className = 'small err';
         // ApiError carries the API's text/plain reason; anything else means the request

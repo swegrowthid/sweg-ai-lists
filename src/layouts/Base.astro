@@ -116,11 +116,12 @@ const mastheadLabel = crumb ?? title;
       })();
     </script>
     <script>
+      import { goInternal } from '../lib/nav';
       import { logoutSession } from '../lib/session';
 
       document.getElementById('header-logout')?.addEventListener('click', () => {
         logoutSession();
-        location.href = '/';
+        goInternal('/');
       });
     </script>
   </body>

@@ -33,6 +33,7 @@ import Base from '../layouts/Base.astro';
 
   <script>
     import { ApiError, login, register } from '../lib/api';
+    import { goInternal } from '../lib/nav';
 
     const TOKEN_KEY = 'sweg-ai-tokens';
 
@@ -54,7 +55,7 @@ import Base from '../layouts/Base.astro';
       event.preventDefault();
       setStatus('registering…', 'small');
       try {
-        // POST /users/register returns the public User only — no tokens.
+        // POST /users/register returns the public User only - no tokens.
         // Log in right away with the same credentials so the browser holds
         // the TokenPair that /submit posts with.
         const username = byId<HTMLInputElement>('username').value.trim();
@@ -63,7 +64,7 @@ import Base from '../layouts/Base.astro';
         const user = await register(username, email, password);
         const pair = await login(user.username, password);
         localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        location.href = '/';
+        goInternal('/');
       } catch (error) {
         setStatus(
           error instanceof ApiError ? error.message : 'could not reach the API from this page.',

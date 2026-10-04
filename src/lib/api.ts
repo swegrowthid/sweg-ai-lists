@@ -3,6 +3,7 @@
  *  Nothing here touches the DOM - shapes in, rows out. */
 
 import { z } from 'astro/zod';
+import { CATEGORY_NAME } from '../data/site';
 
 /** Build-time override: `PUBLIC_SWEG_API_BASE=http://127.0.0.1:8080 bun run build`.
  *  Defaults to the live host so the static build works with no env set.
@@ -64,6 +65,10 @@ const PostSchema = z.object({
   slug: z.string(),
   title: z.string(),
   author_id: z.string(),
+  /** Display name of the author, resolved from the users table at read time.
+   *  Optional only for tolerance: a response without one falls back to the
+   *  author_id prefix in `postToRow`. */
+  author_username: z.string().optional(),
   categories: z.array(CategorySchema),
   /** Sent by POST /posts and GET /posts/{slug}; the list endpoint omits it. */
   items: z.array(PostItemSchema).optional(),
@@ -439,7 +444,11 @@ export function postDate(post: ApiPost): string {
 const UNCATEGORIZED = 'uncategorized';
 
 /** An API post as an EntryRows row. API rows are `display: 'post'` and carry
- *  `data-kind: post`, so the search page's kind filter can select them. */
+ *  `data-kind: post`, so the search page's kind filter can select them. The
+ *  category cell follows the site rule (curated name, else the API's own name,
+ *  else the slug) so the label cannot drift from the /s/ page heading. The
+ *  author cell prefers the username; a response without one degrades to the
+ *  short author id rather than to a blank cell. */
 export function postToRow(post: ApiPost): ApiRow {
   const summary = postSummary(post);
   const category = post.categories[0]?.slug ?? UNCATEGORIZED;
@@ -448,7 +457,8 @@ export function postToRow(post: ApiPost): ApiRow {
     title: post.title,
     summary,
     category,
-    author: post.author_id.slice(0, 8),
+    categoryLabel: CATEGORY_NAME[category] ?? post.categories[0]?.name ?? category,
+    author: post.author_username?.trim() || post.author_id.slice(0, 8),
     display: 'post',
     date: postDate(post),
     attrs: {

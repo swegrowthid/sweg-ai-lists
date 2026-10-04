@@ -87,6 +87,7 @@ instead of install.</pre>
   <script>
     import { ApiError, createPost, fetchCategories } from '../lib/api';
     import type { CreatePostInput, ItemKind } from '../lib/api';
+    import { goInternal } from '../lib/nav';
     import { ensurePair, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
@@ -102,7 +103,7 @@ instead of install.</pre>
     function renderAuth() {
       auth.innerHTML = storedPair()?.access_token
         ? 'posting as the logged-in account · <a href="/login">switch account</a>'
-        : 'not logged in — <a href="/login">log in</a> to post through the API, or use the PR route below.';
+        : 'not logged in - <a href="/login">log in</a> to post through the API, or use the PR route below.';
     }
 
     function syncKind() {
@@ -169,14 +170,14 @@ instead of install.</pre>
       event.preventDefault();
       const token = (await ensurePair())?.access_token;
       if (!token) {
-        setStatus('not logged in — log in first.', 'small err');
+        setStatus('not logged in - log in first.', 'small err');
         return;
       }
       setStatus('posting…', 'small');
       try {
         const post = await createPost(payload(), token);
         // The generated slug answers immediately - detail pages render live.
-        location.href = `/entry/?s=${encodeURIComponent(post.slug)}`;
+        goInternal(`/entry/?s=${encodeURIComponent(post.slug)}`);
         return;
       } catch (error) {
         // ApiError carries the API's text/plain reason; anything else means the request
@@ -184,10 +185,10 @@ instead of install.</pre>
         const expired = error instanceof ApiError && error.status === 401;
         setStatus(
           expired
-            ? 'session expired — log in again.'
+            ? 'session expired - log in again.'
             : error instanceof ApiError
               ? error.message
-              : 'could not reach the API from this page — use the PR route below.',
+              : 'could not reach the API from this page - use the PR route below.',
           'small err',
         );
       }
