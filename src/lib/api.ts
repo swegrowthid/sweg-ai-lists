@@ -286,6 +286,13 @@ export async function fetchPost(slug: string, fetchImpl?: FetchLike): Promise<Ap
   return toOne(PostSchema, await apiFetch<unknown>(path, { fetchImpl }), path);
 }
 
+/** Wanted list: posts the community flagged, newest-marked first. Same Post
+ *  shape as /posts; the mark timestamp is ordering only, so rows reuse
+ *  postToRow (post.created_at) for the date cell. */
+export async function fetchWanted(fetchImpl?: FetchLike): Promise<ApiPost[]> {
+  return toRows(PostSchema, await apiFetch<unknown>('/wanted', { fetchImpl }), '/wanted');
+}
+
 /** Public digest feed, newest `published_at` first. Read-only: the API fills it
  *  by daily sync, so callers only ever GET it. */
 export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
