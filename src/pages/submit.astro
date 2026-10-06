@@ -15,7 +15,7 @@ import Base from '../layouts/Base.astro';
     <div class="row">
       <label for="title">title</label>
       <input type="text" id="title" name="title" maxlength="200" required />
-      <p class="small">the slug is generated from this - <code>my first skill</code> becomes <code>my-first-skill</code>.</p>
+      <p class="small">the slug is generated from this - <code>my first post</code> becomes <code>my-first-post</code>.</p>
     </div>
     <div class="row">
       <label for="category">category</label>
@@ -56,33 +56,6 @@ import Base from '../layouts/Base.astro';
   </form>
   <p class="small" id="status" hidden></p>
   <p class="small" id="auth"></p>
-
-  <section class="home-section">
-  <h2>Contribute by pull request</h2>
-  <ol>
-    <li>Write the file at <code>src/content/entries/your-slug.md</code>.</li>
-    <li>Match the schema: frontmatter below plus your SKILL.md text or setting prompt as the body.</li>
-    <li>Open a PR against this repo.</li>
-  </ol>
-  <pre>---
-title: "my skill"
-summary: "one-line description of what it does"
-kind: skill
-category: coding
-author: "you"
-updated: 2026-09-20
-tags: ["agents"]
-status: submitted
-install: "npx my-skill"
-examples:
-  - prompt: "do the thing"
-    without: "agent output before the skill"
-    with: "agent output after the skill"
----
-Your SKILL.md body here. Settings use target/model
-instead of install.</pre>
-  <p>Every entry passes the <a href="/help">review bar</a> before it lists.</p>
-  </section>
 
   <script>
     import { ApiError, createPost, fetchCategories } from '../lib/api';
