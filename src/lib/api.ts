@@ -17,8 +17,8 @@ export const API_BASE =
       'https://api.ai-sweg.my.id';
 
 /** Every request is aborted after this long. Pages treat any throw as "API
- *  unavailable" and fall back to the local entries collection, so a slow or
- *  dead API can never hang the build. */
+ *  unavailable" and render an empty list, so a slow or dead API can never
+ *  hang the build. */
 const TIMEOUT_MS = 8000;
 
 /** An HTTP response the API refused, or a body that does not match the spec.
@@ -64,6 +64,9 @@ const PostSchema = z.object({
   slug: z.string(),
   title: z.string(),
   author_id: z.string(),
+  /** Username of the author, joined from users at read time. Absent on
+   *  older API responses; callers fall back to a truncated author_id. */
+  author_username: z.string().optional(),
   categories: z.array(CategorySchema),
   /** Sent by POST /posts and GET /posts/{slug}; the list endpoint omits it. */
   items: z.array(PostItemSchema).optional(),
@@ -448,7 +451,7 @@ export function postToRow(post: ApiPost): ApiRow {
     title: post.title,
     summary,
     category,
-    author: post.author_id.slice(0, 8),
+    author: post.author_username || post.author_id.slice(0, 8),
     display: 'post',
     date: postDate(post),
     attrs: {

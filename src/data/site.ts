@@ -4,9 +4,9 @@
 export const SITE = {
   name: 'swegai',
   room: 'community',
-  title: 'swegai: AI skills & settings for the community',
+  title: 'swegai: community AI posts',
   description:
-    'A community catalog of AI skills and settings. Each skill is a SKILL.md package that teaches an agent a job. Each setting is a reusable system prompt or agent config.',
+    'A community catalog of AI posts: practical workflows and notes shared openly.',
 };
 
 /** Category slugs double as the `/s/<slug>` route segment. The name is what renders. */

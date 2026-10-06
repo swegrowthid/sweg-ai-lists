@@ -1,35 +1,9 @@
 ---
-import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
-import { CATEGORIES, CATEGORY_NAME } from '../data/site';
+import { CATEGORIES } from '../data/site';
 import { fetchCategories, fetchNews, fetchPosts, newsToRow, postToRow } from '../lib/api';
 import type { ApiCategory, ApiNews, ApiPost } from '../lib/api';
-
-const localEntries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
-const localRows = localEntries.map((entry) => {
-  const { data } = entry;
-  const ts = data.updated.getTime();
-  return {
-    ts,
-    row: {
-      url: `/entry/${entry.id}`,
-      title: data.title,
-      summary: data.summary,
-      category: data.category,
-      author: data.author,
-      display: data.kind === 'setting' ? 'setting' : 'free',
-      date: data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      attrs: {
-        'data-source': 'local',
-        'data-ts': String(ts),
-        'data-kind': data.kind,
-        'data-category': data.category,
-        'data-text': `${data.title} ${data.summary} ${data.tags.join(' ')}`.toLowerCase(),
-      },
-    },
-  };
-});
 
 let apiPosts: ApiPost[] = [];
 try {
@@ -37,7 +11,6 @@ try {
 } catch {
   apiPosts = [];
 }
-
 let apiCategories: ApiCategory[] = [];
 try {
   apiCategories = await fetchCategories();
@@ -45,26 +18,22 @@ try {
   apiCategories = [];
 }
 
-const localSlugs = new Set(localEntries.map((entry) => entry.id));
-const apiRows = apiPosts.filter((post) => !localSlugs.has(post.slug)).map((post) => {
-  const row = postToRow(post);
-  const ts = Date.parse(post.created_at) || 0;
-  return {
-    ts,
-    row: { ...row, attrs: { ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) } },
-  };
-});
+const rows = apiPosts
+  .map((post) => {
+    const row = postToRow(post);
+    const ts = Date.parse(post.created_at) || 0;
+    return {
+      ts,
+      row: { ...row, attrs: { ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) } },
+    };
+  })
+  .sort((a, b) => b.ts - a.ts)
+  .map((item) => item.row);
 
-const rows = [...localRows, ...apiRows].sort((a, b) => b.ts - a.ts).map((item) => item.row);
 const homeRowLimit = 5;
 const homeNewsLimit = 5;
 const homeCategoryLimit = 4;
 const categoryMap = new Map<string, string>(CATEGORIES.map((category) => [category.slug, category.name]));
-for (const entry of localEntries) {
-  if (!categoryMap.has(entry.data.category)) {
-    categoryMap.set(entry.data.category, CATEGORY_NAME[entry.data.category] ?? entry.data.category);
-  }
-}
 for (const category of apiCategories) categoryMap.set(category.slug, category.name);
 const categories = [...categoryMap].map(([slug, name]) => ({ slug, name }));
 
@@ -82,10 +51,10 @@ const newsRows = apiNews.map(newsToRow);
     <div class="home-hero-copy">
       <p class="eyebrow">community-built · practical by design</p>
       <h1>Useful AI workflows, shared openly.</h1>
-      <p class="lede">Find skills that teach an agent a job, and settings that give it the right starting point.</p>
+      <p class="lede">Find posts where the community shares what works.</p>
     </div>
     <form class="hero-search" action="/search" method="get" role="search">
-      <input type="search" name="q" aria-label="Search skills and settings" placeholder="Search the catalog" />
+      <input type="search" name="q" aria-label="Search posts" placeholder="Search the catalog" />
       <button type="submit" aria-label="Search">Search</button>
     </form>
   </section>
@@ -93,7 +62,7 @@ const newsRows = apiNews.map(newsToRow);
   <section class="home-section" aria-labelledby="browse-heading">
     <div class="section-heading">
       <h2 id="browse-heading">Browse by category</h2>
-      <a href="/search">all entries →</a>
+      <a href="/search">all posts →</a>
     </div>
     <div class="category-grid" id="category-grid" data-limit={homeCategoryLimit}>
       {categories.map((category, index) => (
@@ -117,12 +86,12 @@ const newsRows = apiNews.map(newsToRow);
   <section class="home-section" aria-labelledby="recent-heading">
     <div class="section-heading">
       <h2 id="recent-heading">Recently added</h2>
-      <a href="/search">View all entries →</a>
+      <a href="/search">View all posts →</a>
     </div>
     <div id="home-rows" data-limit={homeRowLimit}>
       <EntryRows rows={rows} limit={homeRowLimit} />
     </div>
-    <p class="empty-state" id="home-empty" hidden={rows.length > 0}>No entries yet. Check back soon or share one with the community.</p>
+    <p class="empty-state" id="home-empty" hidden={rows.length > 0}>No posts yet. Check back soon or share one with the community.</p>
   </section>
 
   <section class="home-section" aria-labelledby="news-heading">
@@ -189,7 +158,7 @@ const newsRows = apiNews.map(newsToRow);
       try {
         [categories, posts] = await Promise.all([fetchCategories(), fetchPosts()]);
       } catch {
-        return; // Keep the build snapshot, including local Markdown entries.
+        return; // Keep the build snapshot.
       }
 
       const grid = document.getElementById('category-grid');
@@ -222,14 +191,9 @@ const newsRows = apiNews.map(newsToRow);
       const tbody = table?.tBodies[0];
       if (!tbody) return;
       const rowLimit = Number(document.getElementById('home-rows')?.getAttribute('data-limit')) || 5;
-      const localSlugs = new Set(
-        [...tbody.querySelectorAll<HTMLAnchorElement>('tr[data-source="local"] .entry-title')]
-          .map((link) => new URL(link.href).pathname.split('/').filter(Boolean).at(-1) ?? ''),
-      );
-      tbody.querySelectorAll('tr[data-source="api"]').forEach((row) => row.remove());
+      tbody.querySelectorAll('tr').forEach((row) => row.remove());
       const names = new Map(categories.map((category) => [category.slug, category.name]));
       for (const post of posts) {
-        if (localSlugs.has(post.slug)) continue;
         const row = postToRow(post);
         const categoryName = names.get(row.category) ?? CATEGORY_NAME[row.category] ?? row.category;
         const ts = Date.parse(post.created_at) || 0;
