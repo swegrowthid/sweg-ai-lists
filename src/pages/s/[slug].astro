@@ -1,22 +1,18 @@
 ---
 import Base from "../../layouts/Base.astro";
 import EntryRows from "../../components/EntryRows.astro";
-import { CATEGORIES } from "../../data/site";
 import { fetchCategories, fetchPosts, postToRow } from "../../lib/api";
-import type { ApiPost } from "../../lib/api";
+import type { ApiCategory, ApiPost } from "../../lib/api";
 
 export async function getStaticPaths() {
-  const cats: { slug: string; name: string }[] = CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }));
+  let cats: ApiCategory[] = [];
   try {
-    for (const cat of await fetchCategories()) {
-      if (!cats.some((c) => c.slug === cat.slug)) cats.push({ slug: cat.slug, name: cat.name });
-    }
+    cats = await fetchCategories();
   } catch {
-    // API empty or unreachable: the static categories still describe the site.
+    cats = [];
   }
   return cats.map((c) => ({ params: { slug: c.slug }, props: { name: c.name } }));
 }
-
 const { slug } = Astro.params;
 const { name } = Astro.props;
 

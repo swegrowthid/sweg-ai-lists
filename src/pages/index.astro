@@ -1,7 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
-import { CATEGORIES } from '../data/site';
 import { fetchCategories, fetchNews, fetchPosts, newsToRow, postToRow } from '../lib/api';
 import type { ApiCategory, ApiNews, ApiPost } from '../lib/api';
 
@@ -33,9 +32,7 @@ const rows = apiPosts
 const homeRowLimit = 5;
 const homeNewsLimit = 5;
 const homeCategoryLimit = 4;
-const categoryMap = new Map<string, string>(CATEGORIES.map((category) => [category.slug, category.name]));
-for (const category of apiCategories) categoryMap.set(category.slug, category.name);
-const categories = [...categoryMap].map(([slug, name]) => ({ slug, name }));
+const categories = apiCategories.map((category) => ({ slug: category.slug, name: category.name }));
 
 let apiNews: ApiNews[] = [];
 try {
@@ -108,7 +105,7 @@ const newsRows = apiNews.map(newsToRow);
   <script>
     import { fetchCategories, fetchNews, fetchPosts, postToRow } from '../lib/api';
     import { newsRowsHtml } from '../lib/news';
-    import { CATEGORIES, CATEGORY_NAME } from '../data/site';
+    import { CATEGORY_NAME } from '../data/site';
 
     const categoryGrid = document.getElementById('category-grid');
     const categoryToggle = document.getElementById('category-toggle') as HTMLButtonElement | null;
@@ -163,12 +160,7 @@ const newsRows = apiNews.map(newsToRow);
 
       const grid = document.getElementById('category-grid');
       if (grid) {
-        const categoryMap = new Map<string, string>(CATEGORIES.map((category) => [category.slug, category.name]));
-        grid.querySelectorAll<HTMLAnchorElement>('a[data-slug]').forEach((link) => {
-          const slug = link.dataset.slug;
-          if (slug) categoryMap.set(slug, link.textContent?.replace('→', '').trim() ?? slug);
-        });
-        for (const category of categories) categoryMap.set(category.slug, category.name);
+        const categoryMap = new Map(categories.map((category) => [category.slug, category.name]));
         grid.replaceChildren(
           ...[...categoryMap].map(([slug, name]) => {
             const link = document.createElement('a');
