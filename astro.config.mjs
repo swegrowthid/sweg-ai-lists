@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import react from '@astrojs/react';
 import { loadEnv } from 'vite';
 
 // Browser calls from `astro dev` go to same-origin `/api/*` and this proxy
@@ -15,6 +16,7 @@ const apiBase = (
 
 // https://astro.build/config
 export default defineConfig({
+  integrations: [react()],
   vite: {
     server: {
       proxy: {
