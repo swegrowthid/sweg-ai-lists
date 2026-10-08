@@ -175,10 +175,17 @@ main { min-height: 55vh; }
 .searchbar .field { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .searchbar .field > label { flex: 0 0 auto; }
 .searchbar .field > input, .searchbar .field > select { flex: 1 1 0; }
-.searchbar button, .form button[type="submit"] { padding: 8px 13px; border: 0; border-radius: 7px; background: var(--accent); color: #fff; font-weight: 650; }
-.searchbar button:hover, .form button[type="submit"]:hover, .button-primary:hover { background: var(--accent-hover); }
-html[data-theme="dark"] .searchbar button, html[data-theme="dark"] .form button[type="submit"], html[data-theme="dark"] .button-primary { color: #10251b; }
+.searchbar button:not(.chip), .form button[type="submit"] { padding: 8px 13px; border: 0; border-radius: 7px; background: var(--accent); color: #fff; font-weight: 650; }
+.searchbar button:not(.chip):hover, .form button[type="submit"]:hover, .button-primary:hover { background: var(--accent-hover); }
+html[data-theme="dark"] .searchbar button:not(.chip), html[data-theme="dark"] .form button[type="submit"], html[data-theme="dark"] .button-primary { color: #10251b; }
 #count { margin: 0 0 4px; color: var(--muted); font-size: .88rem; }
+
+/* Filter chips, one per fixed group, used by the tools catalog */
+.searchbar .chips { grid-column: 1 / -1; }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip { padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: .82rem; font-weight: 650; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
 /* Detail pages and API-post actions */
 .posting { max-width: 790px; }
@@ -237,7 +244,7 @@ li { margin: 5px 0; }
   .hero-search { max-width: 540px; }
   .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .searchbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .searchbar button { grid-column: 1 / -1; justify-self: start; }
+  .searchbar button:not(.chip) { grid-column: 1 / -1; justify-self: start; }
 }
 
 @media (max-width: 600px) {
@@ -269,7 +276,7 @@ li { margin: 5px 0; }
   .rows { border-spacing: 0; }
   .rows tr { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
   .rows td, .rows td:first-child, .rows td:last-child { display: inline-block; width: auto; padding: 0; border: 0; border-radius: 0; vertical-align: baseline; }
-  .rows .d { display: none; }
+  .rows td.d { display: none; }
   .rows td:nth-child(2) { display: block; margin-bottom: 4px; }
   .rows .entry-title { font-size: .93rem; line-height: 1.35; }
   .rows .entry-kind { margin-left: 5px; padding: 0 6px; font-size: .66rem; vertical-align: 1px; }
@@ -278,7 +285,7 @@ li { margin: 5px 0; }
   .rows .p { text-align: left; }
   .searchbar { grid-template-columns: 1fr; gap: 5px; padding: 12px; }
   .searchbar .field { margin-top: 5px; }
-  .searchbar button { grid-column: auto; }
+  .searchbar button:not(.chip) { grid-column: auto; }
   .detail-actions { align-items: stretch; }
   .copy-button { align-self: flex-start; }
   .wanted-table, .wanted-table tbody, .wanted-table tr { display: block; }

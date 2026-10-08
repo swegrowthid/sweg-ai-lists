@@ -18,7 +18,7 @@ GET /posts (Go API; author_username via JOIN users at read time)
 
 - Post rows come from the API only. The old local `src/content/entries` mock catalog is deleted; do not reintroduce content collections.
 - `author_username` is optional in `PostSchema` (older servers omit it); `postToRow` falls back to `author_id.slice(0, 8)`.
-- The only client-side JS: search filter on `/search`, the `/entry/?s=` detail mount (`src/lib/postDetail.ts`), and the API refresh on home + `/news` + `/tools`. Everything else is server-rendered.
+- The only client-side JS: search filter on `/search`, the `/entry/?s=` detail mount (`src/lib/postDetail.ts`), the API refresh on home + `/news`, and the React island on `/tools`. Everything else is server-rendered.
 - `/search` is prerendered: it ships all API post rows with `data-*` filter keys and filters in the browser. Do not add SSR for this.
 
 ## Key Directories
@@ -29,8 +29,8 @@ src/pages/s/[slug].astro  category listing (paths generated from CATEGORIES)
 src/pages/entry/[slug].astro  detail shell (.posting layout, body client-rendered by postDetail.ts)
 src/pages/search.astro    client-filtered search over prerendered rows
 src/pages/news.astro      AI Tools Digest listing from GET /news (external links, no detail page)
-src/pages/tools.astro     AI tools catalog from GET /tools - client-side cursor pagination (load more), name/category filters
-src/components/           EntryRows (list table)
+src/pages/tools.astro     AI tools catalog shell - renders the ToolsCatalog island
+src/components/           EntryRows (list table), ToolsCatalog.tsx (React island: tools table, chip filters, instant search)
 src/layouts/Base.astro    masthead, topnav, footer, global stylesheet
 src/data/site.ts          SITE, CATEGORIES, CATEGORY_NAME, NAV - single source of truth
 src/styles/style.css      the whole design system, no framework
@@ -52,7 +52,7 @@ bunx astro check   # type check, must be 0 errors
 - Sort and filter in the page, never in `EntryRows.astro`. The component takes a ready `rows` array: `{ url, title, summary, category, author, display, date, attrs? }`.
 - `display` cell: posts `"post"` (set in `postToRow`). Dates: `toLocaleDateString("en-US", { month: "short", day: "numeric" })`.
 - CSS vocabulary is shared, from the skillbay port: `.rows`, `.box`, `.attrs`, `.st`, `.kind`, `.price`, `.muted`, `.small`, `.posting`, `.form`. Reuse these; do not invent parallel classes.
-- No Tailwind, no UI libraries, no client frameworks. Vanilla inline `<script>` only where interaction is required.
+- React is the only client framework, via `@astrojs/react`, and only for the `/tools` island (`src/components/ToolsCatalog.tsx`). No Tailwind, no UI libraries. Other interaction uses vanilla inline `<script>`.
 - Relative imports: two levels from `src/pages/x.astro` (`../layouts/`), three levels from `src/pages/x/y.astro` (`../../layouts/`). This was the one build breaker; check it first.
 - Add a post: logged-in users submit at `/submit` (POST /posts, Bearer). There is no file-based content.
 
