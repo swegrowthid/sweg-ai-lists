@@ -37,6 +37,7 @@ import Base from '../layouts/Base.astro';
   <script>
     import { ApiError, fetchUsers } from '../lib/api';
     import { claims, ensurePair, handleExpiredSession, isTokenExpired, logoutSession, storedPair } from '../lib/session';
+    import type { EnsuredPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
@@ -45,7 +46,17 @@ import Base from '../layouts/Base.astro';
 
     async function main() {
       const hadTokens = !!storedPair();
-      const pair = await ensurePair();
+      let pair: EnsuredPair;
+      try {
+        pair = await ensurePair();
+      } catch {
+        // The session may be fine; the API just did not answer. Keep it and
+        // say so instead of logging out or redirecting.
+        const checking = byId<HTMLParagraphElement>('checking');
+        checking.textContent = 'could not reach the API - reload to try again.';
+        checking.className = 'small err';
+        return;
+      }
       const c = pair ? claims(pair.access_token) : null;
       byId<HTMLParagraphElement>('checking').hidden = true;
       if (!pair || !c?.sub) {

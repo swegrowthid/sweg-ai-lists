@@ -8,6 +8,9 @@ import type { TokenPair } from './api';
 
 export const TOKEN_KEY = 'sweg-ai-tokens';
 
+/** What ensurePair hands back: the live pair, or null for no live session. */
+export type EnsuredPair = TokenPair | null;
+
 export interface Claims {
   /** User id (uuid) - matches ApiPost.author_id and ApiUser.id. */
   sub?: string;
@@ -49,6 +52,45 @@ export function claims(token: string): Claims | null {
   }
 }
 
+/** One refresh per browser: serialized through a Web Lock so two tabs that go
+ *  stale together do not race the same refresh token at POST /auth/refresh.
+ *  The loser's replay would trip the backend's reuse detection and revoke the
+ *  whole token family, logging BOTH tabs out - so the winner's fresh pair,
+ *  visible in localStorage, is reused instead of refreshing twice.
+ *  A transient failure is not proof the session is dead, so only a 401 (the
+ *  refresh token itself is rejected) resolves to null; anything else throws
+ *  for the caller to report as unreachable. */
+async function rotate(staleRefresh: string): Promise<TokenPair | null> {
+  const run = async (): Promise<TokenPair | null> => {
+    const current = storedPair();
+    if (current?.refresh_token && current.refresh_token !== staleRefresh) {
+      // Another tab already rotated - adopt its pair when live, else continue
+      // with ITS refresh token (the stale one this call started with is dead).
+      const c = current.access_token ? claims(current.access_token) : null;
+      if (c?.exp && c.exp * 1000 > Date.now()) return current;
+    }
+    if (!current?.refresh_token) return null;
+    return rotateFresh(current.refresh_token);
+  };
+  const locks =
+    typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+  // ponytail: global lock, browsers without Web Locks keep a small two-tab
+  // race; add a localStorage lease lock if that ever bites.
+  if (locks) return locks.request('sweg-ai-refresh', run);
+  return run();
+}
+
+async function rotateFresh(refreshToken: string): Promise<TokenPair | null> {
+  try {
+    const fresh = await refresh(refreshToken);
+    savePair(fresh);
+    return fresh;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return null;
+    throw error;
+  }
+}
+
 /** A live pair, or null. A dead access token gets one silent refresh -
  *  the refresh token is what keeps the session, not the access token. */
 export async function ensurePair(): Promise<TokenPair | null> {
@@ -57,13 +99,7 @@ export async function ensurePair(): Promise<TokenPair | null> {
   const c = claims(pair.access_token);
   if (c?.exp && c.exp * 1000 > Date.now()) return pair;
   if (!pair.refresh_token) return null;
-  try {
-    const fresh = await refresh(pair.refresh_token);
-    savePair(fresh);
-    return fresh;
-  } catch {
-    return null;
-  }
+  return rotate(pair.refresh_token);
 }
 
 /** A 401 that kills the session: the API rejected the token itself (expired

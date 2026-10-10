@@ -141,18 +141,18 @@ import Base from '../layouts/Base.astro';
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const hadTokens = !!storedPair();
-      const token = (await ensurePair())?.access_token;
-      if (!token) {
-        // Tokens existed but died (refresh rejected) -> must log in again.
-        if (hadTokens) {
-          handleExpiredSession();
+      try {
+        const token = (await ensurePair())?.access_token;
+        if (!token) {
+          // Tokens existed but died (refresh rejected) -> must log in again.
+          if (hadTokens) {
+            handleExpiredSession();
+            return;
+          }
+          setStatus('not logged in — log in first.', 'small err');
           return;
         }
-        setStatus('not logged in — log in first.', 'small err');
-        return;
-      }
-      setStatus('posting…', 'small');
-      try {
+        setStatus('posting…', 'small');
         const post = await createPost(payload(), token);
         // The generated slug answers immediately - detail pages render live.
         location.href = `/entry/?s=${encodeURIComponent(post.slug)}`;
