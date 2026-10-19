@@ -3,9 +3,10 @@
  *  no matter when it was created, and the static build cannot know slugs
  *  that do not exist yet. */
 
-import { SITE } from '../data/site';
+import { CATEGORY_NAME, SITE } from '../data/site';
 import { ApiError, deletePost, fetchPost, postSummary } from './api';
 import type { ApiPost, ApiPostItem } from './api';
+import { goInternal } from './nav';
 import { claims, clearPair, ensurePair, handleExpiredSession, isTokenExpired, storedPair } from './session';
 import type { EnsuredPair } from './session';
 
@@ -50,7 +51,7 @@ function renderPost(post: ApiPost): DocumentFragment {
   attrs.append(el('span', 'kind', 'post'));
   for (const cat of post.categories) {
     const span = el('span');
-    const link = el('a', undefined, cat.name);
+    const link = el('a', undefined, CATEGORY_NAME[cat.slug] ?? cat.name);
     link.href = `/s/${encodeURIComponent(cat.slug)}`;
     span.append(link);
     attrs.append(span);
@@ -61,7 +62,9 @@ function renderPost(post: ApiPost): DocumentFragment {
   const date = Number.isNaN(+updated)
     ? post.updated_at
     : updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  frag.append(note(`updated ${date}`, 'small'));
+  // One byline: the author's name when the API sent one, then the date.
+  const author = post.author_username?.trim();
+  frag.append(note(author ? `by ${author} · updated ${date}` : `updated ${date}`, 'small'));
 
   const actions = el('div', 'detail-actions');
   const share = el('button', 'copy-button', 'Copy post link');
@@ -73,7 +76,7 @@ function renderPost(post: ApiPost): DocumentFragment {
       await navigator.clipboard.writeText(location.href);
       shareStatus.textContent = 'Link copied.';
     } catch {
-      shareStatus.textContent = 'Copy unavailable — copy the page address from your browser.';
+      shareStatus.textContent = 'Copy unavailable - copy the page address from your browser.';
     }
   });
   actions.append(share, shareStatus);
@@ -115,7 +118,7 @@ async function deleteFlow(slug: string, line: HTMLElement): Promise<void> {
       return;
     }
     await deletePost(slug, pair.access_token);
-    location.href = '/';
+    goInternal('/');
   } catch (error) {
     if (isTokenExpired(error)) {
       handleExpiredSession();
@@ -145,6 +148,11 @@ export async function mountPostDetail(root: HTMLElement, slug: string): Promise<
   }
   root.replaceChildren(renderPost(post));
   document.title = `${post.title} - ${SITE.name}`;
+  // The masthead crumb matches the local entry pages: the same label rule
+  // the row cells use, so one category reads one way everywhere.
+  const first = post.categories[0];
+  const crumb = document.querySelector('.bc');
+  if (crumb && first) crumb.textContent = CATEGORY_NAME[first.slug] ?? first.name;
 
   const hadTokens = !!storedPair();
   let pair: EnsuredPair;
