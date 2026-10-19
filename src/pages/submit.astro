@@ -15,7 +15,7 @@ import Base from '../layouts/Base.astro';
     <div class="row">
       <label for="title">title</label>
       <input type="text" id="title" name="title" maxlength="200" required />
-      <p class="small">the slug is generated from this - <code>my first skill</code> becomes <code>my-first-skill</code>.</p>
+      <p class="small">the slug is generated from this - <code>my first post</code> becomes <code>my-first-post</code>.</p>
     </div>
     <div class="row">
       <label for="category">category</label>
@@ -57,38 +57,11 @@ import Base from '../layouts/Base.astro';
   <p class="small" id="status" hidden></p>
   <p class="small" id="auth"></p>
 
-  <section class="home-section">
-  <h2>Contribute by pull request</h2>
-  <ol>
-    <li>Write the file at <code>src/content/entries/your-slug.md</code>.</li>
-    <li>Match the schema: frontmatter below plus your SKILL.md text or setting prompt as the body.</li>
-    <li>Open a PR against this repo.</li>
-  </ol>
-  <pre>---
-title: "my skill"
-summary: "one-line description of what it does"
-kind: skill
-category: coding
-author: "you"
-updated: 2026-09-20
-tags: ["agents"]
-status: submitted
-install: "npx my-skill"
-examples:
-  - prompt: "do the thing"
-    without: "agent output before the skill"
-    with: "agent output after the skill"
----
-Your SKILL.md body here. Settings use target/model
-instead of install.</pre>
-  <p>Every entry passes the <a href="/help">review bar</a> before it lists.</p>
-  </section>
-
   <script>
     import { ApiError, createPost, fetchCategories } from '../lib/api';
     import type { CreatePostInput, ItemKind } from '../lib/api';
     import { goInternal } from '../lib/nav';
-    import { ensurePair, storedPair } from '../lib/session';
+    import { ensurePair, handleExpiredSession, isTokenExpired, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
@@ -168,8 +141,14 @@ instead of install.</pre>
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const hadTokens = !!storedPair();
       const token = (await ensurePair())?.access_token;
       if (!token) {
+        // Tokens existed but died (refresh rejected) -> must log in again.
+        if (hadTokens) {
+          handleExpiredSession();
+          return;
+        }
         setStatus('not logged in - log in first.', 'small err');
         return;
       }
@@ -180,15 +159,17 @@ instead of install.</pre>
         goInternal(`/entry/?s=${encodeURIComponent(post.slug)}`);
         return;
       } catch (error) {
+        // A dead token must log in again; the redirect clears the pair.
+        if (isTokenExpired(error)) {
+          handleExpiredSession();
+          return;
+        }
         // ApiError carries the API's text/plain reason; anything else means the request
         // never landed (offline, or the API's CORS policy blocking this origin).
-        const expired = error instanceof ApiError && error.status === 401;
         setStatus(
-          expired
-            ? 'session expired - log in again.'
-            : error instanceof ApiError
-              ? error.message
-              : 'could not reach the API from this page - use the PR route below.',
+          error instanceof ApiError
+            ? error.message
+            : 'could not reach the API from this page - use the PR route below.',
           'small err',
         );
       }

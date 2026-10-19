@@ -2,7 +2,6 @@
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
 import { CATEGORIES } from '../data/site';
-import { getCollection } from 'astro:content';
 import { fetchCategories, fetchPosts, postToRow } from '../lib/api';
 import type { ApiCategory, ApiPost } from '../lib/api';
 
@@ -21,42 +20,18 @@ try {
 }
 
 // The site builds to static HTML, so a query string never reaches this file at
-// runtime. Every approved entry and every API post is rendered once with
-// data-* filter keys; the inline script applies q/kind/category from the URL.
-// Without JS the full list still renders, which is the right degraded behavior
-// for a catalog.
-const entries = (await getCollection('entries')).filter((entry) => entry.data.status === 'approved');
-const localSlugs = new Set(entries.map((entry) => entry.id));
-
-const rows = [
-  ...entries.map((entry) => ({
-    ts: +entry.data.updated,
-    row: {
-      url: `/entry/${entry.id}`,
-      title: entry.data.title,
-      summary: entry.data.summary,
-      category: entry.data.category,
-      author: entry.data.author,
-      display: entry.data.kind === 'setting' ? 'setting' : 'free',
-      date: entry.data.updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      attrs: {
-        'data-source': 'local',
-        'data-ts': String(entry.data.updated.getTime()),
-        'data-kind': entry.data.kind,
-        'data-category': entry.data.category,
-        'data-text': `${entry.data.title} ${entry.data.summary} ${entry.data.tags.join(' ')}`.toLowerCase(),
-      },
-    },
-  })),
-  // API posts have no kind/tags, so they filter as kind "post"; postToRow already
-  // hangs data-kind, data-category (first slug) and data-text (title + summary) on
-  // them, and renders the date from created_at, which is what we sort on.
-  ...apiPosts.filter((post) => !localSlugs.has(post.slug)).map((post) => {
+// runtime. Every API post is rendered once with data-* filter keys; the inline
+// script applies q/kind/category from the URL. Without JS the full list still
+// renders, which is the right degraded behavior for a catalog.
+// postToRow hangs data-kind ("post"), data-category (first slug) and data-text
+// (title + summary) on each row, and renders the date from created_at, which
+// is what we sort on.
+const rows = apiPosts
+  .map((post) => {
     const ts = Date.parse(post.created_at) || 0;
     const row = postToRow(post);
     return { ts, row: { ...row, attrs: { ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) } } };
-  }),
-]
+  })
   .sort((a, b) => b.ts - a.ts)
   .map((item) => item.row);
 
@@ -70,7 +45,7 @@ for (const cat of apiCategories) {
   <header class="page-head">
     <p class="eyebrow">find something useful</p>
     <h1>Search the catalog</h1>
-    <p class="lede">Filter community skills and settings by words, kind, or category.</p>
+    <p class="lede">Filter posts by words, kind, or category.</p>
   </header>
   <form class="searchbar" method="get" action="/search">
     <div class="field">
@@ -81,8 +56,6 @@ for (const cat of apiCategories) {
       <label class="inline" for="kind">kind</label>
       <select id="kind" name="kind">
         <option value="">any</option>
-        <option value="skill">skill</option>
-        <option value="setting">setting</option>
         <option value="post">post</option>
       </select>
     </div>
@@ -96,7 +69,7 @@ for (const cat of apiCategories) {
     <button type="submit">search</button>
   </form>
 
-  <p class="small" id="count">{rows.length} entries</p>
+  <p class="small" id="count">{rows.length} posts</p>
 
   <div id="results">
     <EntryRows rows={rows} />
@@ -136,7 +109,7 @@ for (const cat of apiCategories) {
       const count = document.getElementById('count');
       if (count) {
         const filterNote = active ? ` matching ${[q && `"${params.get('q')}"`, kind, category].filter(Boolean).join(' ')}` : '';
-        count.textContent = `${shown} ${shown === 1 ? 'entry' : 'entries'}${filterNote}`;
+        count.textContent = `${shown} ${shown === 1 ? 'post' : 'posts'}${filterNote}`;
       }
       const empty = document.getElementById('empty');
       if (empty) empty.hidden = shown > 0;

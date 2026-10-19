@@ -18,8 +18,8 @@ export const API_BASE =
       'https://api.ai-sweg.my.id';
 
 /** Every request is aborted after this long. Pages treat any throw as "API
- *  unavailable" and fall back to the local entries collection, so a slow or
- *  dead API can never hang the build. */
+ *  unavailable" and render an empty list, so a slow or dead API can never
+ *  hang the build. */
 const TIMEOUT_MS = 8000;
 
 /** An HTTP response the API refused, or a body that does not match the spec.
@@ -286,6 +286,13 @@ export async function fetchPosts(query: PostQuery = {}, fetchImpl?: FetchLike): 
 export async function fetchPost(slug: string, fetchImpl?: FetchLike): Promise<ApiPost> {
   const path = `/posts/${encodeURIComponent(slug)}`;
   return toOne(PostSchema, await apiFetch<unknown>(path, { fetchImpl }), path);
+}
+
+/** Wanted list: posts the community flagged, newest-marked first. Same Post
+ *  shape as /posts; the mark timestamp is ordering only, so rows reuse
+ *  postToRow (post.created_at) for the date cell. */
+export async function fetchWanted(fetchImpl?: FetchLike): Promise<ApiPost[]> {
+  return toRows(PostSchema, await apiFetch<unknown>('/wanted', { fetchImpl }), '/wanted');
 }
 
 /** Public digest feed, newest `published_at` first. Read-only: the API fills it
