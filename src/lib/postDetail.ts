@@ -7,6 +7,7 @@ import { SITE } from '../data/site';
 import { ApiError, deletePost, fetchPost, postSummary } from './api';
 import type { ApiPost, ApiPostItem } from './api';
 import { claims, clearPair, ensurePair, handleExpiredSession, isTokenExpired, storedPair } from './session';
+import type { EnsuredPair } from './session';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -103,15 +104,16 @@ function renderError(root: HTMLElement, error: unknown): void {
 async function deleteFlow(slug: string, line: HTMLElement): Promise<void> {
   if (!confirm('Delete this post? This cannot be undone.')) return;
   line.textContent = 'deleting…';
-  // A dead access token gets one silent refresh before the call.
-  const pair = await ensurePair();
-  if (!pair?.access_token) {
-    // The delete button renders only for a logged-in owner, so a dead pair
-    // here is always an expired session: clear it and force a fresh login.
-    handleExpiredSession();
-    return;
-  }
   try {
+    // A dead access token gets one silent refresh before the call; a throw
+    // here means the API was unreachable, which the catch below reports.
+    const pair = await ensurePair();
+    if (!pair?.access_token) {
+      // The delete button renders only for a logged-in owner, so a dead pair
+      // here is always an expired session: clear it and force a fresh login.
+      handleExpiredSession();
+      return;
+    }
     await deletePost(slug, pair.access_token);
     location.href = '/';
   } catch (error) {
@@ -145,7 +147,13 @@ export async function mountPostDetail(root: HTMLElement, slug: string): Promise<
   document.title = `${post.title} - ${SITE.name}`;
 
   const hadTokens = !!storedPair();
-  const pair = await ensurePair();
+  let pair: EnsuredPair;
+  try {
+    pair = await ensurePair();
+  } catch {
+    // Public read: an unreachable API must not clear anything or redirect.
+    return;
+  }
   const mine = pair?.access_token && claims(pair.access_token)?.sub === post.author_id;
   if (!mine) {
     // Tokens were stored but the refresh died - drop the corpse.
