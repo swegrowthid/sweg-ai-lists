@@ -2,19 +2,26 @@
 import Base from '../layouts/Base.astro';
 import ToolsCatalog from '../components/ToolsCatalog';
 import { fetchTools } from '../lib/api';
-import type { ApiTool } from '../lib/api';
+import type { ApiPageMeta, ApiTool } from '../lib/api';
 
-/** Rows per request. The API rejects a `per_page` above 100. */
+/** Rows per request. Matches the island's PAGE_SIZE and stays under the API
+ *  cap of 100. The island fetches every later page at runtime. */
 const PAGE_SIZE = 50;
 
-/** The build renders the first rows so the static page has content before
- *  hydration. The island then loads the full catalog and filters it in the
- *  browser - the URL stays the query state, so shared links keep working. */
+/** The build renders page 1 - rows, count line, and pager - so the static page
+ *  has content and working links before hydration. The URL stays the query
+ *  state, so shared links keep working. */
 let tools: ApiTool[] = [];
+let meta: ApiPageMeta | null = null;
+let buildFailed = false;
 try {
-  tools = (await fetchTools({ perPage: PAGE_SIZE })).data;
+  const page = await fetchTools({ page: 1, perPage: PAGE_SIZE });
+  tools = page.data;
+  meta = page.meta;
 } catch {
-  // The API is unreachable at build time. Render the shell; the island retries.
+  // The API is unreachable at build time. Render the shell with a visible
+  // notice; the island retries at runtime.
+  buildFailed = true;
 }
 ---
 
@@ -27,5 +34,5 @@ try {
     </p>
   </header>
 
-  <ToolsCatalog tools={tools} client:load />
+  <ToolsCatalog tools={tools} meta={meta} buildFailed={buildFailed} client:load />
 </Base>

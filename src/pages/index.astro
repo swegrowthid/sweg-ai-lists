@@ -133,9 +133,11 @@ const newsRows = apiNews.map(newsToRow);
       return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
     }
 
-    function rowHtml(row: ReturnType<typeof postToRow>, ts: number, categoryName: string): string {
+    function rowHtml(row: ReturnType<typeof postToRow>, ts: number): string {
       const kind = row.attrs['data-kind'] ?? row.display;
       const summary = row.summary && row.summary !== row.title ? `<span class="entry-summary">${esc(row.summary)}</span>` : '';
+      // Same label rule as EntryRows.astro, so a repaint cannot relabel a row.
+      const label = row.categoryLabel ?? CATEGORY_NAME[row.category] ?? row.category;
       const attrs = Object.entries({ ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) })
         .map(([key, value]) => ` ${key}="${esc(value)}"`)
         .join('');
@@ -143,7 +145,7 @@ const newsRows = apiNews.map(newsToRow);
         `<tr${attrs}><td class="d">${esc(row.date)}</td>` +
         `<td class="entry-main"><a class="entry-title" href="${esc(row.url)}">${esc(row.title)}</a>` +
         `<span class="entry-kind">${esc(kind)}</span>${summary}</td>` +
-        `<td class="c category-cell"><a href="/s/${encodeURIComponent(row.category)}">${esc(categoryName)}</a></td>` +
+        `<td class="c category-cell"><a href="/s/${encodeURIComponent(row.category)}">${esc(label)}</a></td>` +
         `<td class="c author-cell">${esc(row.author)}</td>` +
         `<td class="p"><span class="price">${esc(row.display)}</span></td></tr>`
       );
@@ -184,12 +186,10 @@ const newsRows = apiNews.map(newsToRow);
       if (!tbody) return;
       const rowLimit = Number(document.getElementById('home-rows')?.getAttribute('data-limit')) || 5;
       tbody.querySelectorAll('tr').forEach((row) => row.remove());
-      const names = new Map(categories.map((category) => [category.slug, category.name]));
       for (const post of posts) {
         const row = postToRow(post);
-        const categoryName = names.get(row.category) ?? CATEGORY_NAME[row.category] ?? row.category;
         const ts = Date.parse(post.created_at) || 0;
-        tbody.insertAdjacentHTML('beforeend', rowHtml(row, ts, categoryName));
+        tbody.insertAdjacentHTML('beforeend', rowHtml(row, ts));
       }
       [...tbody.rows]
         .sort((a, b) => Number(b.dataset.ts ?? 0) - Number(a.dataset.ts ?? 0))

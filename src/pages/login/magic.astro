@@ -1,0 +1,76 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="magic link" crumb="log in">
+  <div class="auth">
+    <p class="eyebrow">one-time link</p>
+    <h1>Sign in</h1>
+    <p>This button signs you in once. The link works one time and then stops.</p>
+    <div class="box">
+      <form class="form" id="magic-form">
+        <div class="actions">
+          <button type="submit">sign in</button>
+        </div>
+        <p class="small" id="status" hidden></p>
+      </form>
+    </div>
+    <p class="alt"><a href="/login">back to log in</a></p>
+  </div>
+
+  <script>
+    import { ApiError, verifyMagicLink } from '../../lib/api';
+    import { goInternal } from '../../lib/nav';
+    import { savePair } from '../../lib/session';
+
+    // Element lookups are typed here; the markup above owns these ids.
+    function byId<T extends HTMLElement>(id: string): T {
+      return document.getElementById(id) as T;
+    }
+
+    const form = byId<HTMLFormElement>('magic-form');
+    const status = byId<HTMLParagraphElement>('status');
+    const button = form.querySelector('button') as HTMLButtonElement;
+    const token = new URLSearchParams(location.search).get('token') ?? '';
+
+    // GET only renders. The token is spent by the POST this click sends, so an
+    // email scanner that prefetches the link cannot burn it.
+    function fail(text: string) {
+      status.className = 'small err';
+      status.textContent = text;
+      status.hidden = false;
+      status.append(' ');
+      const link = document.createElement('a');
+      link.href = '/login';
+      link.textContent = 'log in another way';
+      status.append(link);
+    }
+
+    if (!token) {
+      button.disabled = true;
+      fail('this link is incomplete.');
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!token) return;
+      button.disabled = true;
+      status.className = 'small';
+      status.textContent = 'signing in…';
+      status.hidden = false;
+      try {
+        const pair = await verifyMagicLink(token);
+        savePair(pair);
+        goInternal('/');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          fail('this link is invalid or expired.');
+        } else {
+          // The token is still unspent here, so another click may retry.
+          button.disabled = false;
+          status.className = 'small err';
+          status.textContent = 'could not reach the API from this page.';
+        }
+      }
+    });
+  </script>
+</Base>

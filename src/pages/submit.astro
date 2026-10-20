@@ -60,6 +60,7 @@ import Base from '../layouts/Base.astro';
   <script>
     import { ApiError, createPost, fetchCategories } from '../lib/api';
     import type { CreatePostInput, ItemKind } from '../lib/api';
+    import { goInternal } from '../lib/nav';
     import { ensurePair, handleExpiredSession, isTokenExpired, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
@@ -75,7 +76,7 @@ import Base from '../layouts/Base.astro';
     function renderAuth() {
       auth.innerHTML = storedPair()?.access_token
         ? 'posting as the logged-in account · <a href="/login">switch account</a>'
-        : 'not logged in — <a href="/login">log in</a> to post through the API, or use the PR route below.';
+        : 'not logged in - <a href="/login">log in</a> to post through the API, or use the PR route below.';
     }
 
     function syncKind() {
@@ -155,7 +156,7 @@ import Base from '../layouts/Base.astro';
         setStatus('posting…', 'small');
         const post = await createPost(payload(), token);
         // The generated slug answers immediately - detail pages render live.
-        location.href = `/entry/?s=${encodeURIComponent(post.slug)}`;
+        goInternal(`/entry/?s=${encodeURIComponent(post.slug)}`);
         return;
       } catch (error) {
         // A dead token must log in again; the redirect clears the pair.
@@ -168,7 +169,7 @@ import Base from '../layouts/Base.astro';
         setStatus(
           error instanceof ApiError
             ? error.message
-            : 'could not reach the API from this page — use the PR route below.',
+            : 'could not reach the API from this page - use the PR route below.',
           'small err',
         );
       }

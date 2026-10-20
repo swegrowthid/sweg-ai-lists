@@ -187,6 +187,14 @@ html[data-theme="dark"] .searchbar button:not(.chip), html[data-theme="dark"] .f
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
+/* Pager under the tools catalog: plain numbered links, hairline boxes */
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 18px 0 0; font-size: .84rem; }
+.pager a, .pager .disabled { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 30px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); text-decoration: none; }
+.pager a:hover { border-color: var(--accent); color: var(--accent); }
+.pager a[aria-current="page"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.pager .disabled { opacity: .55; }
+.pager .gap { padding: 0 2px; color: var(--muted); }
+
 /* Detail pages and API-post actions */
 .posting { max-width: 790px; }
 .posting h1 { font-size: clamp(2rem, 4vw, 2.7rem); }

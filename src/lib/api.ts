@@ -3,6 +3,7 @@
  *  Nothing here touches the DOM - shapes in, rows out. */
 
 import { z } from 'astro/zod';
+import { CATEGORY_NAME } from '../data/site';
 
 /** Build-time override: `PUBLIC_SWEG_API_BASE=http://127.0.0.1:8080 bun run build`.
  *  Defaults to the live host so the static build works with no env set.
@@ -64,8 +65,9 @@ const PostSchema = z.object({
   slug: z.string(),
   title: z.string(),
   author_id: z.string(),
-  /** Username of the author, joined from users at read time. Absent on
-   *  older API responses; callers fall back to a truncated author_id. */
+  /** Display name of the author, resolved from the users table at read time.
+   *  Optional only for tolerance: a response without one falls back to the
+   *  author_id prefix in `postToRow`. */
   author_username: z.string().optional(),
   categories: z.array(CategorySchema),
   /** Sent by POST /posts and GET /posts/{slug}; the list endpoint omits it. */
@@ -140,6 +142,12 @@ const TokenPairSchema = z.object({
   expires_in: z.number(),
   refresh_token: z.string(),
   refresh_expires_in: z.number(),
+});
+
+/** The magic link request always answers this one generic message, whether or
+ *  not the email is registered. */
+const MagicLinkResponseSchema = z.object({
+  message: z.string(),
 });
 
 const UserSchema = z.object({
@@ -305,7 +313,8 @@ export interface ToolQuery {
   group?: string;
   /** Older spelling of `group`; the API still reads it. */
   category?: string;
-  /** Case-insensitive substring of the tool name. */
+  /** Case-insensitive substring of name, website label, status, min spend,
+   *  and AI features. */
   q?: string;
   /** Sort key: `name` or `updated`. Empty keeps the source catalog order. */
   sort?: string;
@@ -317,10 +326,15 @@ export interface ToolQuery {
   perPage?: number;
 }
 
-/** One page of the tools catalog. The server does the grouping, sorting and
- *  paging; `meta` counts every row the filter matches, not just this page, so a
- *  caller can drive a pager without a second request. */
-export async function fetchTools(query: ToolQuery = {}, fetchImpl?: FetchLike): Promise<ApiToolPage> {
+/** One page of the tools catalog. The server does the grouping, searching,
+ *  sorting and paging; `meta` counts every row the filter matches, not just
+ *  this page, so a caller can drive a pager without a second request.
+ *  `signal` cancels a request a newer one replaced. */
+export async function fetchTools(
+  query: ToolQuery = {},
+  fetchImpl?: FetchLike,
+  signal?: AbortSignal,
+): Promise<ApiToolPage> {
   const params = new URLSearchParams();
   if (query.group) params.set('group', query.group);
   if (query.category) params.set('category', query.category);
@@ -331,7 +345,7 @@ export async function fetchTools(query: ToolQuery = {}, fetchImpl?: FetchLike): 
   if (query.perPage) params.set('per_page', String(query.perPage));
   const search = params.toString();
   const path = search ? `/tools?${search}` : '/tools';
-  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl }), '/tools');
+  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl, signal }), '/tools');
   return { data: toRows(ToolSchema, raw.data, '/tools'), meta: raw.meta };
 }
 
@@ -350,6 +364,26 @@ export async function login(identifier: string, password: string, fetchImpl?: Fe
     TokenPairSchema,
     await apiFetch<unknown>('/auth/login', { method: 'POST', body: { identifier, password }, fetchImpl }),
     '/auth/login',
+  );
+}
+
+/** Requests a one-time login link. The reply is the same generic message for
+ *  every syntactically valid email, so the page cannot reveal registration. */
+export async function requestMagicLink(email: string, fetchImpl?: FetchLike): Promise<string> {
+  const response = toOne(
+    MagicLinkResponseSchema,
+    await apiFetch<unknown>('/auth/magic-link', { method: 'POST', body: { email }, fetchImpl }),
+    '/auth/magic-link',
+  );
+  return response.message;
+}
+
+/** Exchanges a one-time link token for the same pair /auth/login returns. */
+export async function verifyMagicLink(token: string, fetchImpl?: FetchLike): Promise<TokenPair> {
+  return toOne(
+    TokenPairSchema,
+    await apiFetch<unknown>('/auth/magic-link/verify', { method: 'POST', body: { token }, fetchImpl }),
+    '/auth/magic-link/verify',
   );
 }
 
@@ -449,7 +483,11 @@ export function postDate(post: ApiPost): string {
 const UNCATEGORIZED = 'uncategorized';
 
 /** An API post as an EntryRows row. API rows are `display: 'post'` and carry
- *  `data-kind: post`, so the search page's kind filter can select them. */
+ *  `data-kind: post`, so the search page's kind filter can select them. The
+ *  category cell follows the site rule (curated name, else the API's own name,
+ *  else the slug) so the label cannot drift from the /s/ page heading. The
+ *  author cell prefers the username; a response without one degrades to the
+ *  short author id rather than to a blank cell. */
 export function postToRow(post: ApiPost): ApiRow {
   const summary = postSummary(post);
   const category = post.categories[0]?.slug ?? UNCATEGORIZED;
@@ -458,7 +496,8 @@ export function postToRow(post: ApiPost): ApiRow {
     title: post.title,
     summary,
     category,
-    author: post.author_username || post.author_id.slice(0, 8),
+    categoryLabel: CATEGORY_NAME[category] ?? post.categories[0]?.name ?? category,
+    author: post.author_username?.trim() || post.author_id.slice(0, 8),
     display: 'post',
     date: postDate(post),
     attrs: {

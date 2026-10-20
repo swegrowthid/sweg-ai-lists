@@ -21,6 +21,17 @@ import Base from '../layouts/Base.astro';
         </div>
         <p class="small" id="status" hidden></p>
       </form>
+      <p class="alt">or</p>
+      <form class="form" id="magic-form">
+        <div class="row">
+          <label for="magic-email">email</label>
+          <input type="email" id="magic-email" name="email" autocomplete="email" required />
+        </div>
+        <div class="actions">
+          <button type="submit">email me a login link</button>
+        </div>
+        <p class="small" id="magic-status" hidden></p>
+      </form>
     </div>
     <p class="alt">Don't have an account? <a href="/register">sign up</a></p>
     <p class="alt muted" id="state"></p>
@@ -29,8 +40,9 @@ import Base from '../layouts/Base.astro';
   </div>
 
   <script>
-    import { ApiError, login } from '../lib/api';
+    import { ApiError, login, requestMagicLink } from '../lib/api';
     import type { TokenPair } from '../lib/api';
+    import { goInternal } from '../lib/nav';
     import { logoutSession } from '../lib/session';
 
     const TOKEN_KEY = 'sweg-ai-tokens';
@@ -77,7 +89,7 @@ import Base from '../layouts/Base.astro';
       out.textContent = 'log out';
       out.addEventListener('click', () => {
         logoutSession();
-        location.href = '/';
+        goInternal('/');
       });
       state.append(out);
       state.append(' · ');
@@ -99,7 +111,7 @@ import Base from '../layouts/Base.astro';
           byId<HTMLInputElement>('password').value,
         );
         localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        location.href = nextPath();
+        goInternal(nextPath());
       } catch (error) {
         status.className = 'small err';
         // ApiError carries the API's text/plain reason; anything else means the request
@@ -114,6 +126,36 @@ import Base from '../layouts/Base.astro';
           link.textContent = 'no account? sign up';
           status.append(link);
         }
+      }
+    });
+
+    const magicForm = byId<HTMLFormElement>('magic-form');
+    const magicStatus = byId<HTMLParagraphElement>('magic-status');
+
+    magicForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = magicForm.querySelector('button') as HTMLButtonElement;
+      button.disabled = true;
+      magicStatus.className = 'small';
+      magicStatus.textContent = 'sending…';
+      magicStatus.hidden = false;
+      try {
+        // The API answers the same generic message for registered and
+        // unregistered email, so this line never reveals which one it was.
+        magicStatus.textContent = await requestMagicLink(
+          byId<HTMLInputElement>('magic-email').value.trim(),
+        );
+      } catch (error) {
+        magicStatus.className = 'small err';
+        if (error instanceof ApiError && error.status === 429) {
+          magicStatus.textContent = 'too many requests - try again later.';
+        } else if (error instanceof ApiError && error.status === 400) {
+          magicStatus.textContent = 'enter a valid email address.';
+        } else {
+          magicStatus.textContent = 'could not reach the API from this page.';
+        }
+      } finally {
+        button.disabled = false;
       }
     });
 
