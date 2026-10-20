@@ -153,15 +153,7 @@ import Base from '../layouts/Base.astro';
           setStatus('not logged in — log in first.', 'small err');
           return;
         }
-<<<<<<< HEAD
         setStatus('posting…', 'small');
-=======
-        setStatus('not logged in - log in first.', 'small err');
-        return;
-      }
-      setStatus('posting…', 'small');
-      try {
->>>>>>> main
         const post = await createPost(payload(), token);
         // The generated slug answers immediately - detail pages render live.
         goInternal(`/entry/?s=${encodeURIComponent(post.slug)}`);
