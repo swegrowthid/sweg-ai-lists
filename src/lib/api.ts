@@ -313,7 +313,8 @@ export interface ToolQuery {
   group?: string;
   /** Older spelling of `group`; the API still reads it. */
   category?: string;
-  /** Case-insensitive substring of the tool name. */
+  /** Case-insensitive substring of name, website label, status, min spend,
+   *  and AI features. */
   q?: string;
   /** Sort key: `name` or `updated`. Empty keeps the source catalog order. */
   sort?: string;
@@ -325,10 +326,15 @@ export interface ToolQuery {
   perPage?: number;
 }
 
-/** One page of the tools catalog. The server does the grouping, sorting and
- *  paging; `meta` counts every row the filter matches, not just this page, so a
- *  caller can drive a pager without a second request. */
-export async function fetchTools(query: ToolQuery = {}, fetchImpl?: FetchLike): Promise<ApiToolPage> {
+/** One page of the tools catalog. The server does the grouping, searching,
+ *  sorting and paging; `meta` counts every row the filter matches, not just
+ *  this page, so a caller can drive a pager without a second request.
+ *  `signal` cancels a request a newer one replaced. */
+export async function fetchTools(
+  query: ToolQuery = {},
+  fetchImpl?: FetchLike,
+  signal?: AbortSignal,
+): Promise<ApiToolPage> {
   const params = new URLSearchParams();
   if (query.group) params.set('group', query.group);
   if (query.category) params.set('category', query.category);
@@ -339,7 +345,7 @@ export async function fetchTools(query: ToolQuery = {}, fetchImpl?: FetchLike): 
   if (query.perPage) params.set('per_page', String(query.perPage));
   const search = params.toString();
   const path = search ? `/tools?${search}` : '/tools';
-  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl }), '/tools');
+  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl, signal }), '/tools');
   return { data: toRows(ToolSchema, raw.data, '/tools'), meta: raw.meta };
 }
 
