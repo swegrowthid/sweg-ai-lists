@@ -144,6 +144,12 @@ const TokenPairSchema = z.object({
   refresh_expires_in: z.number(),
 });
 
+/** The magic link request always answers this one generic message, whether or
+ *  not the email is registered. */
+const MagicLinkResponseSchema = z.object({
+  message: z.string(),
+});
+
 const UserSchema = z.object({
   id: z.string(),
   username: z.string(),
@@ -352,6 +358,26 @@ export async function login(identifier: string, password: string, fetchImpl?: Fe
     TokenPairSchema,
     await apiFetch<unknown>('/auth/login', { method: 'POST', body: { identifier, password }, fetchImpl }),
     '/auth/login',
+  );
+}
+
+/** Requests a one-time login link. The reply is the same generic message for
+ *  every syntactically valid email, so the page cannot reveal registration. */
+export async function requestMagicLink(email: string, fetchImpl?: FetchLike): Promise<string> {
+  const response = toOne(
+    MagicLinkResponseSchema,
+    await apiFetch<unknown>('/auth/magic-link', { method: 'POST', body: { email }, fetchImpl }),
+    '/auth/magic-link',
+  );
+  return response.message;
+}
+
+/** Exchanges a one-time link token for the same pair /auth/login returns. */
+export async function verifyMagicLink(token: string, fetchImpl?: FetchLike): Promise<TokenPair> {
+  return toOne(
+    TokenPairSchema,
+    await apiFetch<unknown>('/auth/magic-link/verify', { method: 'POST', body: { token }, fetchImpl }),
+    '/auth/magic-link/verify',
   );
 }
 
