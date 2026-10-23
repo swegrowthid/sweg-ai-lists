@@ -280,7 +280,7 @@ li { margin: 5px 0; }
   .home-section .rows tr { margin: 5px 0; padding: 8px 10px; }
   .section-heading { align-items: flex-start; }
   .section-heading h2 { font-size: 1.45rem; }
-  .rows, .rows tbody, .rows tr { display: block; width: 100%; }
+  .rows, .rows tbody, .rows tr { display: block; width: auto; }
   .rows { border-spacing: 0; }
   .rows tr { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
   .rows td, .rows td:first-child, .rows td:last-child { display: inline-block; width: auto; padding: 0; border: 0; border-radius: 0; vertical-align: baseline; }
