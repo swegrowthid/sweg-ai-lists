@@ -29,13 +29,24 @@ export const CATEGORY_NAME: Record<string, string> = Object.fromEntries(
   CATEGORIES.map((c) => [c.slug, c.name]),
 );
 
-/** Front nav. `badge: true` marks the entry that gets the red accent.
- *  `auth: "in"` renders only when logged in, `"out"` only when logged out. */
-export const NAV: { href: string; label: string; badge?: boolean; auth?: 'in' | 'out' }[] = [
-  { href: '/submit', label: 'post an entry', auth: 'in' },
-  { href: '/news', label: 'news' },
-  { href: '/tools', label: 'ai tools' },
-  { href: '/wanted', label: 'wanted', badge: true },
-  { href: '/search', label: 'search' },
-  { href: '/help', label: 'how it works' },
-];
+/** Header navigation. `badge: true` marks the entry that gets the accent;
+ *  auth-gated links are revealed by the shared client-side session check. */
+type HeaderLink = { href: string; label: string; badge?: boolean; auth?: 'in' | 'out' };
+
+export const NAV: {
+  explore: HeaderLink[];
+  community: HeaderLink[];
+  utility: HeaderLink[];
+  account: HeaderLink[];
+} = {
+  explore: [
+    { href: '/tools', label: 'AI tools' },
+    { href: '/news', label: 'News' },
+  ],
+  community: [
+    { href: '/wanted', label: 'Wanted', badge: true },
+    { href: '/search', label: 'Search' },
+  ],
+  utility: [{ href: '/help', label: 'Help' }],
+  account: [{ href: '/submit', label: 'Post Catalog', auth: 'in' as const }],
+};
