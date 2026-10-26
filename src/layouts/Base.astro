@@ -15,6 +15,7 @@ interface Props {
 const { title, description, tagline, crumb } = Astro.props;
 const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
 const mastheadLabel = crumb ?? title;
+const currentYear = new Date().getFullYear();
 ---
 <!doctype html>
 <html lang="en">
@@ -48,24 +49,42 @@ const mastheadLabel = crumb ?? title;
         {mastheadLabel ? <span class="bc">{mastheadLabel}</span> : null}
         <div class="masthead-actions">
           <a class="login-link" href="/login" data-auth="out" hidden>Log in</a>
-          <a class="login-link" href="/profile" data-auth="in" hidden>Profile</a>
-          <button class="logout-link" id="header-logout" type="button" data-auth="in" hidden>Log out</button>
+          {
+            NAV.account.map((item) => (
+              <a class="login-link" href={item.href} data-auth={item.auth} hidden>
+                {item.label}
+              </a>
+            ))
+          }
+          <details class="account-group" name="main-navigation" data-auth="in" hidden>
+            <summary class="account-trigger">Account</summary>
+            <div class="nav-menu">
+              <a href="/profile">Profile</a>
+              <button id="header-logout" type="button">Log out</button>
+            </div>
+          </details>
           <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">☾</button>
         </div>
       </div>
       <nav id="topnav" aria-label="Main navigation">
       {
-        NAV.map((item) => (
-          <a
-            href={item.href}
-            class:list={[item.badge && 'badge', item.label === 'post an entry' && 'nav-cta']}
-            data-auth={item.auth}
-            hidden={!!item.auth}
-          >
-            {item.label}
-          </a>
+        [
+          { label: 'Explore', links: NAV.explore },
+          { label: 'Community', links: NAV.community },
+        ].map((group) => (
+          <details class="nav-group" name="main-navigation">
+            <summary>{group.label}</summary>
+            <div class="nav-menu">
+              {group.links.map((item) => (
+                <a href={item.href} class:list={[item.badge && 'badge']}>
+                  {item.label}
+                </a>
+              ))}
+            </div>
+          </details>
         ))
       }
+      {NAV.utility.map((item) => <a class="nav-utility" href={item.href}>{item.label}</a>)}
       </nav>
     </header>
     <main id="main-content">
@@ -73,11 +92,11 @@ const mastheadLabel = crumb ?? title;
       <slot />
     </main>
     <footer class="site-footer">
-      <a href="/about">about</a>
-      <a href="/help">help</a>
-      <a href="/submit" data-auth="in" hidden>submit</a>
-      <a href="/wanted">wanted</a>
-      <span> · <a href="https://swegrowth.id/">swegrowth.id</a></span>
+      <span>© {currentYear}</span>
+      <span aria-hidden="true">·</span>
+      <a href="/about">About</a>
+      <span aria-hidden="true">·</span>
+      <a href="https://swegrowth.id/">swegrowth.id</a>
     </footer>
     <script is:inline>
       (function () {
