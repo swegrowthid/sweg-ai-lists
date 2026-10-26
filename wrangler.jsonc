@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "swegai",
+  "name": "sweg-ai-lists",
   "compatibility_date": "2026-10-21",
   "assets": {
     "directory": "./dist"
