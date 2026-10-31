@@ -21,17 +21,20 @@ import Base from '../layouts/Base.astro';
         </div>
         <p class="small" id="status" hidden></p>
       </form>
-      <p class="alt">or</p>
-      <form class="form" id="magic-form">
+      <form class="form" id="magic-form" hidden>
         <div class="row">
           <label for="magic-email">email</label>
           <input type="email" id="magic-email" name="email" autocomplete="email" required />
         </div>
         <div class="actions">
-          <button type="submit">email me a login link</button>
+          <button type="submit">email me a sign-in link</button>
         </div>
         <p class="small" id="magic-status" hidden></p>
       </form>
+      <p class="alt">
+        <button type="button" class="category-toggle" id="swap-magic">email me a sign-in link instead</button>
+        <button type="button" class="category-toggle" id="swap-password" hidden>log in with a password instead</button>
+      </p>
     </div>
     <p class="alt">Don't have an account? <a href="/register">sign up</a></p>
     <p class="alt muted" id="state"></p>
@@ -131,6 +134,25 @@ import Base from '../layouts/Base.astro';
 
     const magicForm = byId<HTMLFormElement>('magic-form');
     const magicStatus = byId<HTMLParagraphElement>('magic-status');
+
+    // One sign-in method is visible at a time; the swap link reveals the other
+    // one, so the page never shows two competing forms for the user to pick.
+    const swapToMagic = byId<HTMLButtonElement>('swap-magic');
+    const swapToPassword = byId<HTMLButtonElement>('swap-password');
+
+    function showMagic(show: boolean) {
+      form.hidden = show;
+      magicForm.hidden = !show;
+      swapToMagic.hidden = show;
+      swapToPassword.hidden = !show;
+      status.hidden = true;
+      magicStatus.hidden = true;
+      if (show) byId<HTMLInputElement>('magic-email').focus();
+      else byId<HTMLInputElement>('identifier').focus();
+    }
+
+    swapToMagic.addEventListener('click', () => showMagic(true));
+    swapToPassword.addEventListener('click', () => showMagic(false));
 
     magicForm.addEventListener('submit', async (event) => {
       event.preventDefault();
