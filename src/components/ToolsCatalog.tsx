@@ -322,13 +322,13 @@ export default function ToolsCatalog({ tools, meta, buildFailed }: Props) {
       <form className="searchbar" role="search" onSubmit={(event) => event.preventDefault()}>
         <div className="field">
           <label className="inline" htmlFor="tool-q">
-            name
+            search
           </label>
           <input
             id="tool-q"
             type="search"
             value={input}
-            placeholder="search name, site, feature"
+            placeholder="name, site, status, min spend, features"
             onChange={(event) => setInput(event.currentTarget.value)}
           />
         </div>
