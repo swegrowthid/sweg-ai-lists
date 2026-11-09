@@ -355,9 +355,31 @@ export async function fetchDailyTerms(month?: string, fetchImpl?: FetchLike): Pr
   const path = month ? `/daily-terms?month=${encodeURIComponent(month)}` : '/daily-terms';
   const raw = toOne(DailyTermListSchema, await apiFetch<unknown>(path, { fetchImpl }), '/daily-terms');
   return {
-    data: toRows(DailyTermSchema, raw.data, '/daily-terms'),
+    data: toRows(DailyTermSchema, raw.data, '/daily-terms').sort(
+      (a, b) => b.year - a.year || b.month - a.month || b.day - a.day,
+    ),
     meta: raw.meta,
   };
+}
+
+/** Recent terms can cross a month boundary when the latest month has fewer
+ *  than the requested number of entries. */
+export async function fetchRecentDailyTerms(limit: number, fetchImpl?: FetchLike): Promise<ApiDailyTerm[]> {
+  const latest = await fetchDailyTerms(undefined, fetchImpl);
+  const terms = [...latest.data];
+  if (terms.length < limit) {
+    const months = await fetchDailyTermMonths(fetchImpl);
+    const previousMonths = months
+      .map((month) => month.month_key)
+      .filter((month) => month < latest.meta.month_key)
+      .sort()
+      .reverse();
+    for (const month of previousMonths) {
+      if (terms.length >= limit) break;
+      terms.push(...(await fetchDailyTerms(month, fetchImpl)).data);
+    }
+  }
+  return terms.slice(0, limit);
 }
 
 export interface ToolQuery {

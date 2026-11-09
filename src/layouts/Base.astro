@@ -48,6 +48,13 @@ const currentYear = new Date().getFullYear();
         </a>
         {mastheadLabel ? <span class="bc">{mastheadLabel}</span> : null}
         <div class="masthead-actions">
+          <a class="search-link" href="/search/" aria-label="Search" title="Search">
+            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+              <circle cx="8.7" cy="8.7" r="5.8" stroke="currentColor" stroke-width="1.7" />
+              <path d="m13 13 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+            <span>Search</span>
+          </a>
           <a class="login-link" href="/login" data-auth="out" hidden>Log in</a>
           {
             <a class="login-link" href={ACCOUNT_ACTION.href} data-auth="in" hidden>
@@ -89,6 +96,37 @@ const currentYear = new Date().getFullYear();
     </footer>
     <script is:inline>
       (function () {
+        function openExternalLinks(root) {
+          if (root instanceof HTMLAnchorElement) root = [root];
+          else root = root.querySelectorAll('a[href]');
+          for (const link of root) {
+            try {
+              var url = new URL(link.href, location.href);
+              if ((url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== location.origin) {
+                link.target = '_blank';
+                var rel = new Set((link.rel || '').split(/\s+/).filter(Boolean));
+                rel.add('noopener');
+                rel.add('noreferrer');
+                link.rel = [...rel].join(' ');
+              }
+            } catch (e) {}
+          }
+        }
+        openExternalLinks(document);
+        new MutationObserver(function (records) {
+          for (const record of records) {
+            if (record.type === 'attributes') openExternalLinks(record.target);
+            for (const node of record.addedNodes) {
+              if (node instanceof Element) openExternalLinks(node);
+            }
+          }
+        }).observe(document.documentElement, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          attributeFilter: ['href'],
+        });
+
         var btn = document.getElementById('theme-toggle');
         var meta = document.getElementById('theme-color');
         function paint(t) {
