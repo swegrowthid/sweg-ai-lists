@@ -50,8 +50,8 @@ const newsRows = apiNews.map(newsToRow);
       <h1>Useful AI workflows, shared openly.</h1>
       <p class="lede">Find posts where the community shares what works.</p>
     </div>
-    <form class="hero-search" action="/search" method="get" role="search">
-      <input type="search" name="q" aria-label="Search posts" placeholder="Search the catalog" />
+    <form class="hero-search" action="/skill" method="get" role="search">
+      <input type="search" name="q" aria-label="Search skills" placeholder="Search skills" />
       <button type="submit" aria-label="Search">Search</button>
     </form>
   </section>
@@ -59,7 +59,7 @@ const newsRows = apiNews.map(newsToRow);
   <section class="home-section" aria-labelledby="browse-heading">
     <div class="section-heading">
       <h2 id="browse-heading">Browse by category</h2>
-      <a href="/search">all posts →</a>
+      <a href="/skill">all skills →</a>
     </div>
     <div class="category-grid" id="category-grid" data-limit={homeCategoryLimit}>
       {categories.map((category, index) => (
@@ -83,7 +83,7 @@ const newsRows = apiNews.map(newsToRow);
   <section class="home-section" aria-labelledby="recent-heading">
     <div class="section-heading">
       <h2 id="recent-heading">Recently added</h2>
-      <a href="/search">View all posts →</a>
+      <a href="/skill">View all skills →</a>
     </div>
     <div id="home-rows" data-limit={homeRowLimit}>
       <EntryRows rows={rows} limit={homeRowLimit} />
@@ -93,8 +93,8 @@ const newsRows = apiNews.map(newsToRow);
 
   <section class="home-section" aria-labelledby="news-heading">
     <div class="section-heading">
-      <h2 id="news-heading">AI tools digest</h2>
-      <a href="/news">all news →</a>
+      <h2 id="news-heading">AI News Digest</h2>
+      <a href="/news">View all news →</a>
     </div>
     <div id="news-rows" data-limit={homeNewsLimit}>
       <EntryRows rows={newsRows} limit={homeNewsLimit} />

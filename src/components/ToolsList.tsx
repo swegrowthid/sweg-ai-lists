@@ -19,7 +19,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 /** Every pager link points here, so the hrefs stay valid without JS. */
 const TOOLS_PATH = '/tools/';
 
-/** The three fixed catalog groups. `value` is what the URL and the API carry.
+/** The three fixed tool groups. `value` is what the URL and the API carry.
  *  Hints state the boundary the 2026 landscape draws between the groups:
  *  provider owns the model, coding agent owns the task, ADE owns the workspace. */
 const GROUPS = [
@@ -169,7 +169,7 @@ interface Props {
   buildFailed: boolean;
 }
 
-export default function ToolsCatalog({ tools, meta, buildFailed }: Props) {
+export default function ToolsList({ tools, meta, buildFailed }: Props) {
   const [rows, setRows] = useState<ApiTool[]>(tools);
   const [pageMeta, setPageMeta] = useState<ApiPageMeta | null>(meta);
   const [status, setStatus] = useState<LoadStatus>(buildFailed ? 'degraded' : 'ready');
@@ -376,10 +376,10 @@ export default function ToolsCatalog({ tools, meta, buildFailed }: Props) {
         <div className="notice" role="status">
           <p>
             {attempted
-              ? `the live catalog is unavailable${
+              ? `the live tools list is unavailable${
                   rows.length > 0 ? ` - showing the first ${rows.length} rows from the last build` : ''
-                }. search, filters, and paging need the live catalog.`
-              : 'the catalog is unavailable at build time. loading the live catalog...'}
+                }. search, filters, and paging need the live tools list.`
+              : 'the tools list is unavailable at build time. loading live tools...'}
           </p>
           <button type="button" className="category-toggle" onClick={() => setAttempt((n) => n + 1)} disabled={busy}>
             try again
@@ -396,7 +396,7 @@ export default function ToolsCatalog({ tools, meta, buildFailed }: Props) {
           </tbody>
         </table>
       ) : busy ? (
-        <p className="small muted">loading the catalog...</p>
+        <p className="small muted">loading tools...</p>
       ) : status === 'degraded' ? null : (
         <div className="empty-state">
           {viewMeta.total === 0 ? (
@@ -417,7 +417,7 @@ export default function ToolsCatalog({ tools, meta, buildFailed }: Props) {
       )}
 
       {status === 'ready' && viewMeta.total_pages > 1 ? (
-        <nav className="pager" aria-label="catalog pages">
+        <nav className="pager" aria-label="tool pages">
           {query.page > 1 ? (
             <a href={hrefFor({ ...query, page: query.page - 1 }, true)} onClick={(e) => goPage(e, query.page - 1)}>
               prev

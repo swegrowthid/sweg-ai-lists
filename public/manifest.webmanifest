@@ -1,7 +1,7 @@
 {
-  "name": "swegai",
-  "short_name": "swegai",
-  "description": "A community catalog of AI skills and settings.",
+  "name": "ai.swegrowth.id",
+  "short_name": "ai.swegrowth.id",
+  "description": "Community-shared AI skills, workflows, and settings.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
