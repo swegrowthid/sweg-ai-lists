@@ -144,15 +144,11 @@ export async function mountPostDetail(root: HTMLElement, slug: string): Promise<
     post = await fetchPost(slug);
   } catch (error) {
     renderError(root, error);
+    document.title = `Post not available - ${SITE.name}`;
     return;
   }
   root.replaceChildren(renderPost(post));
   document.title = `${post.title} - ${SITE.name}`;
-  // The masthead crumb matches the local entry pages: the same label rule
-  // the row cells use, so one category reads one way everywhere.
-  const first = post.categories[0];
-  const crumb = document.querySelector('.bc');
-  if (crumb && first) crumb.textContent = CATEGORY_NAME[first.slug] ?? first.name;
 
   const hadTokens = !!storedPair();
   let pair: EnsuredPair;

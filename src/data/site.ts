@@ -2,11 +2,11 @@
  *  Every page reads its heading text from here, so a rename is a one-line change. */
 
 export const SITE = {
-  name: 'swegai',
+  name: 'ai.swegrowth.id',
   room: 'community',
-  title: 'swegai: community AI posts',
+  title: 'ai.swegrowth.id: community AI skills',
   description:
-    'A community catalog of AI posts: practical workflows and notes shared openly.',
+    'A community collection of AI skills: practical workflows and notes shared openly.',
 };
 
 /** Category slugs double as the `/s/<slug>` route segment. The name is what renders. */
@@ -29,24 +29,19 @@ export const CATEGORY_NAME: Record<string, string> = Object.fromEntries(
   CATEGORIES.map((c) => [c.slug, c.name]),
 );
 
-/** Header navigation. `badge: true` marks the entry that gets the accent;
- *  auth-gated links are revealed by the shared client-side session check. */
-type HeaderLink = { href: string; label: string; badge?: boolean; auth?: 'in' | 'out' };
+/** Primary navigation, grouped with dividers in the header. */
+export const NAV = [
+  [
+    { href: '/skill', label: 'AI Skills' },
+    { href: '/tools', label: 'AI Tools' },
+    { href: '/wanted', label: 'Wanted List', badge: true },
+  ],
+  [
+    { href: '/news', label: 'AI News Digest' },
+    { href: '/daily-terms', label: 'SWE Daily Term' },
+  ],
+  [{ href: '/help', label: 'What is This Web?' }],
+];
 
-export const NAV: {
-  explore: HeaderLink[];
-  community: HeaderLink[];
-  utility: HeaderLink[];
-  account: HeaderLink[];
-} = {
-  explore: [
-    { href: '/tools', label: 'AI tools' },
-    { href: '/news', label: 'News' },
-  ],
-  community: [
-    { href: '/wanted', label: 'Wanted', badge: true },
-    { href: '/search', label: 'Search' },
-  ],
-  utility: [{ href: '/help', label: 'Help' }],
-  account: [{ href: '/submit', label: 'Post Catalog', auth: 'in' as const }],
-};
+/** Auth-gated account action shown beside the account menu. */
+export const ACCOUNT_ACTION = { href: '/submit', label: 'Post a Skill' };

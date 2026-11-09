@@ -22,7 +22,7 @@ try {
 // The site builds to static HTML, so a query string never reaches this file at
 // runtime. Every API post is rendered once with data-* filter keys; the inline
 // script applies q/kind/category from the URL. Without JS the full list still
-// renders, which is the right degraded behavior for a catalog.
+// renders, which is the right degraded behavior for a skills page.
 // postToRow hangs data-kind ("post"), data-category (first slug) and data-text
 // (title + summary) on each row, and renders the date from created_at, which
 // is what we sort on.
@@ -41,13 +41,13 @@ for (const cat of apiCategories) {
 }
 ---
 
-<Base title="search">
+<Base title="AI Skills">
   <header class="page-head">
-    <p class="eyebrow">find something useful</p>
-    <h1>Search the catalog</h1>
-    <p class="lede">Filter posts by words, kind, or category.</p>
+    <p class="eyebrow">community AI skills</p>
+    <h1>AI Skills</h1>
+    <p class="lede">Browse community-shared AI skills. Filter by words, kind, or category.</p>
   </header>
-  <form class="searchbar" method="get" action="/search">
+  <form class="searchbar" method="get" action="/skill">
     <div class="field">
       <label class="inline" for="q">words</label>
       <input type="text" id="q" name="q" />

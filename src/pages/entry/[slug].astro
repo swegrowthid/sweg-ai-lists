@@ -22,7 +22,7 @@ const { slug } = Astro.props as { slug: string };
 // the shell ships at build time, the post body hydrates in the browser, so
 // the page always shows live data and can offer the owner a delete action.
 ---
-<Base title="post" crumb="post">
+<Base title="Post" masthead="AI Skills">
   <div class="posting" id="detail" data-slug={slug}>
     <p class="muted">loading post…</p>
   </div>

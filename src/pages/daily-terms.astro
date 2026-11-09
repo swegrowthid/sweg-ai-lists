@@ -1,0 +1,176 @@
+---
+import Base from '../layouts/Base.astro';
+import { fetchDailyTermMonths, fetchDailyTerms } from '../lib/api';
+import type { ApiDailyTerm, ApiDailyTermMonth } from '../lib/api';
+import { markdownToSafeHtml } from '../lib/markdown';
+
+let months: ApiDailyTermMonth[] = [];
+let terms: ApiDailyTerm[] = [];
+let activeMonth: ApiDailyTermMonth | null = null;
+let loadFailed = false;
+
+try {
+  months = await fetchDailyTermMonths();
+} catch {
+  // The client retries so a temporary build-time API outage is recoverable.
+}
+
+try {
+  const page = await fetchDailyTerms();
+  terms = page.data;
+  activeMonth = page.meta;
+  if (!months.some((month) => month.month_key === activeMonth?.month_key)) {
+    months.unshift(activeMonth);
+  }
+} catch {
+  loadFailed = true;
+}
+---
+
+<Base title="SWE Daily Term">
+  <header class="page-head">
+    <p class="eyebrow">daily software engineering terms</p>
+    <h1>SWE Daily Term</h1>
+    <p class="lede">Browse software engineering terms, one term at a time.</p>
+  </header>
+
+  <div class="field daily-term-month">
+    <label for="daily-term-month">Month</label>
+    <select id="daily-term-month" aria-label="Choose a month">
+      <option value="">Latest available</option>
+      {months.map((month) => (
+        <option value={month.month_key} selected={month.month_key === activeMonth?.month_key}>
+          {month.name} {month.year} ({month.count})
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <p class="daily-term-meta" id="daily-term-meta" aria-live="polite">
+    {activeMonth
+      ? `${activeMonth.count} terms`
+      : loadFailed
+        ? 'Daily terms are temporarily unavailable.'
+        : 'No daily terms are available yet.'}
+    {activeMonth ? <a href={activeMonth.source_url} target="_blank" rel="noreferrer">Source file</a> : null}
+  </p>
+  <div class="daily-terms" id="daily-terms">
+    {
+      terms.map((term) => (
+        <article class="box daily-term">
+          <p class="eyebrow">{term.day > 0 ? `Day ${term.day}` : 'Daily term'}</p>
+          <h2>{term.title}</h2>
+          <h3>Definition</h3>
+          <div class="daily-term-copy" set:html={markdownToSafeHtml(term.definition)} />
+          {term.example ? (
+            <>
+              <h3>Example</h3>
+              <div class="daily-term-copy" set:html={markdownToSafeHtml(term.example)} />
+            </>
+          ) : null}
+        </article>
+      ))
+    }
+  </div>
+  <p class="empty-state" id="daily-terms-empty" hidden={terms.length > 0 || loadFailed}>
+    No terms are available for this month.
+  </p>
+
+  <script>
+    import { fetchDailyTermMonths, fetchDailyTerms } from '../lib/api';
+    import type { ApiDailyTerm, ApiDailyTermMonth } from '../lib/api';
+    import { markdownToSafeHtml } from '../lib/markdown';
+
+    const selector = document.getElementById('daily-term-month') as HTMLSelectElement | null;
+    const list = document.getElementById('daily-terms');
+    const status = document.getElementById('daily-term-meta');
+    const empty = document.getElementById('daily-terms-empty');
+
+    function appendTerm(parent: HTMLElement, term: ApiDailyTerm): void {
+      const card = document.createElement('article');
+      card.className = 'box daily-term';
+
+      const day = document.createElement('p');
+      day.className = 'eyebrow';
+      day.textContent = term.day > 0 ? `Day ${term.day}` : 'Daily term';
+      card.append(day);
+
+      const title = document.createElement('h2');
+      title.textContent = term.title;
+      card.append(title);
+
+      const definitionLabel = document.createElement('h3');
+      definitionLabel.textContent = 'Definition';
+      card.append(definitionLabel);
+      const definition = document.createElement('div');
+      definition.className = 'daily-term-copy';
+      definition.innerHTML = markdownToSafeHtml(term.definition);
+      card.append(definition);
+
+      if (term.example) {
+        const exampleLabel = document.createElement('h3');
+        exampleLabel.textContent = 'Example';
+        card.append(exampleLabel);
+        const example = document.createElement('div');
+        example.className = 'daily-term-copy';
+        example.innerHTML = markdownToSafeHtml(term.example);
+        card.append(example);
+      }
+
+      parent.append(card);
+    }
+
+    function updateMonths(months: ApiDailyTermMonth[], selected: string): void {
+      if (!selector) return;
+      const latest = document.createElement('option');
+      latest.value = '';
+      latest.textContent = 'Latest available';
+      selector.replaceChildren(latest);
+      for (const month of months) {
+        const option = document.createElement('option');
+        option.value = month.month_key;
+        option.textContent = `${month.name} ${month.year} (${month.count})`;
+        selector.append(option);
+      }
+      selector.value = selected;
+    }
+
+    function updateMeta(month: ApiDailyTermMonth): void {
+      if (!status) return;
+      status.replaceChildren(document.createTextNode(`${month.count} terms`));
+      const source = document.createElement('a');
+      source.href = month.source_url;
+      source.target = '_blank';
+      source.rel = 'noreferrer';
+      source.textContent = 'Source file';
+      status.append(source);
+    }
+
+    async function loadMonth(month?: string): Promise<void> {
+      if (!list || !empty || !status) return;
+      status.textContent = 'Loading daily terms…';
+      try {
+        const [available, page] = await Promise.all([
+          fetchDailyTermMonths(),
+          fetchDailyTerms(month),
+        ]);
+        const selected = month ?? page.meta.month_key;
+        updateMonths(available, selected);
+        list.replaceChildren();
+        for (const term of page.data) appendTerm(list, term);
+        empty.hidden = page.data.length > 0;
+        updateMeta(page.meta);
+        const url = new URL(location.href);
+        if (month) url.searchParams.set('month', month);
+        else url.searchParams.delete('month');
+        history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      } catch {
+        status.textContent = 'Could not load daily terms. Please try again.';
+      }
+    }
+
+    selector?.addEventListener('change', () => void loadMonth(selector.value || undefined));
+    const requestedMonth = new URLSearchParams(location.search).get('month');
+    void loadMonth(requestedMonth || undefined);
+  </script>
+</Base>

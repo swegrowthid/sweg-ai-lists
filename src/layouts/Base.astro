@@ -1,20 +1,20 @@
 ---
-import { NAV, SITE } from "../data/site";
+import { ACCOUNT_ACTION, NAV, SITE } from "../data/site";
 import '../styles/style.css';
 import logoUrl from '../assets/logo.jpeg';
 
 interface Props {
   title?: string;
+  /** Section label beside the logo when the page title is a detail title. */
+  masthead?: string;
   description?: string;
   /** Tagline under the hairline rule, home page only. */
   tagline?: string;
-  /** Breadcrumb segment after "home", e.g. the category name on /s/<slug>. */
-  crumb?: string;
 }
 
-const { title, description, tagline, crumb } = Astro.props;
+const { title, masthead, description, tagline } = Astro.props;
 const pageTitle = title ? `${title} - ${SITE.name}` : SITE.title;
-const mastheadLabel = crumb ?? title;
+const mastheadLabel = masthead ?? title;
 const currentYear = new Date().getFullYear();
 ---
 <!doctype html>
@@ -50,11 +50,9 @@ const currentYear = new Date().getFullYear();
         <div class="masthead-actions">
           <a class="login-link" href="/login" data-auth="out" hidden>Log in</a>
           {
-            NAV.account.map((item) => (
-              <a class="login-link" href={item.href} data-auth={item.auth} hidden>
-                {item.label}
-              </a>
-            ))
+            <a class="login-link" href={ACCOUNT_ACTION.href} data-auth="in" hidden>
+              {ACCOUNT_ACTION.label}
+            </a>
           }
           <details class="account-group" name="main-navigation" data-auth="in" hidden>
             <summary class="account-trigger">Account</summary>
@@ -67,24 +65,15 @@ const currentYear = new Date().getFullYear();
         </div>
       </div>
       <nav id="topnav" aria-label="Main navigation">
-      {
-        [
-          { label: 'Explore', links: NAV.explore },
-          { label: 'Community', links: NAV.community },
-        ].map((group) => (
-          <details class="nav-group" name="main-navigation">
-            <summary>{group.label}</summary>
-            <div class="nav-menu">
-              {group.links.map((item) => (
-                <a href={item.href} class:list={[item.badge && 'badge']}>
-                  {item.label}
-                </a>
-              ))}
-            </div>
-          </details>
-        ))
-      }
-      {NAV.utility.map((item) => <a class="nav-utility" href={item.href}>{item.label}</a>)}
+        {NAV.map((group) => (
+          <div class="nav-group">
+            {group.map((item) => (
+              <a href={item.href} class:list={['nav-link', item.badge && 'badge']}>
+                {item.label}
+              </a>
+            ))}
+          </div>
+        ))}
       </nav>
     </header>
     <main id="main-content">

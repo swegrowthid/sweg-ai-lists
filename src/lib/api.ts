@@ -89,6 +89,35 @@ const NewsSchema = z.object({
   updated_at: z.string(),
 });
 
+const DailyTermSchema = z.object({
+  id: z.string(),
+  year: z.number(),
+  month: z.number(),
+  month_key: z.string(),
+  day: z.number(),
+  slug: z.string(),
+  title: z.string(),
+  definition: z.string(),
+  example: z.string(),
+  source_file: z.string(),
+  source_url: z.string(),
+});
+
+const DailyTermMonthSchema = z.object({
+  month_key: z.string(),
+  name: z.string(),
+  year: z.number(),
+  month: z.number(),
+  source_file: z.string(),
+  source_url: z.string(),
+  count: z.number(),
+});
+
+const DailyTermListSchema = z.object({
+  data: z.array(z.unknown()),
+  meta: DailyTermMonthSchema,
+});
+
 const ToolSchema = z.object({
   /** Source-table id, PREFIX-NNN: P = providers, CA = coding-agents, ADE = ade. */
   id: z.string(),
@@ -162,11 +191,13 @@ export type ApiCategory = z.infer<typeof CategorySchema>;
 export type ApiPostItem = z.infer<typeof PostItemSchema>;
 export type ApiPost = z.infer<typeof PostSchema>;
 export type ApiNews = z.infer<typeof NewsSchema>;
+export type ApiDailyTerm = z.infer<typeof DailyTermSchema>;
+export type ApiDailyTermMonth = z.infer<typeof DailyTermMonthSchema>;
 export type ApiTool = z.infer<typeof ToolSchema>;
 export type ApiToolCategory = z.infer<typeof ToolCategorySchema>;
 export type ApiPageMeta = z.infer<typeof PageMetaSchema>;
 
-/** One page of the tools catalog plus the paging metadata for the rest. */
+/** One page of tools plus the paging metadata for the rest. */
 export interface ApiToolPage {
   data: ApiTool[];
   meta: ApiPageMeta;
@@ -307,6 +338,28 @@ export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
   return toRows(NewsSchema, await apiFetch<unknown>('/news', { fetchImpl }), '/news');
 }
 
+export interface ApiDailyTermPage {
+  data: ApiDailyTerm[];
+  meta: ApiDailyTermMonth;
+}
+
+export async function fetchDailyTermMonths(fetchImpl?: FetchLike): Promise<ApiDailyTermMonth[]> {
+  return toRows(
+    DailyTermMonthSchema,
+    await apiFetch<unknown>('/daily-terms/months', { fetchImpl }),
+    '/daily-terms/months',
+  );
+}
+
+export async function fetchDailyTerms(month?: string, fetchImpl?: FetchLike): Promise<ApiDailyTermPage> {
+  const path = month ? `/daily-terms?month=${encodeURIComponent(month)}` : '/daily-terms';
+  const raw = toOne(DailyTermListSchema, await apiFetch<unknown>(path, { fetchImpl }), '/daily-terms');
+  return {
+    data: toRows(DailyTermSchema, raw.data, '/daily-terms'),
+    meta: raw.meta,
+  };
+}
+
 export interface ToolQuery {
   /** Group name: all, provider, coding-agent or ade. The source slugs and id
    *  prefixes (providers, coding-agents, p, ca, ...) resolve to the same rows. */
@@ -316,7 +369,7 @@ export interface ToolQuery {
   /** Case-insensitive substring of name, website label, status, min spend,
    *  and AI features. */
   q?: string;
-  /** Sort key: `name` or `updated`. Empty keeps the source catalog order. */
+  /** Sort key: `name` or `updated`. Empty keeps the source order. */
   sort?: string;
   /** Sort direction, `asc` or `desc`. Only read when `sort` is set. */
   order?: string;
@@ -326,7 +379,7 @@ export interface ToolQuery {
   perPage?: number;
 }
 
-/** One page of the tools catalog. The server does the grouping, searching,
+/** One page of tools. The server does the grouping, searching,
  *  sorting and paging; `meta` counts every row the filter matches, not just
  *  this page, so a caller can drive a pager without a second request.
  *  `signal` cancels a request a newer one replaced. */

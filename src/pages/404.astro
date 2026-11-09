@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 ---
-<Base title="not found">
+<Base title="Page not found">
   <div class="posting" id="detail" hidden>
     <p class="muted">loading post…</p>
   </div>
@@ -16,6 +16,8 @@ import Base from '../layouts/Base.astro';
       const root = document.getElementById('detail') as HTMLElement;
       (document.getElementById('nf') as HTMLElement).hidden = true;
       root.hidden = false;
+      const mastheadTitle = document.querySelector('.bc');
+      if (mastheadTitle) mastheadTitle.textContent = 'AI Skills';
       void mountPostDetail(root, match[1]);
     }
   </script>

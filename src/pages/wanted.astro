@@ -14,7 +14,7 @@ const rows = wanted.map((post) => ({
   url: `/entry/${encodeURIComponent(post.slug)}`,
 }));
 ---
-<Base title="wanted" crumb="wanted">
+<Base title="Wanted">
   <header class="page-head">
     <p class="eyebrow">community requests</p>
     <h1>Wanted</h1>
@@ -34,6 +34,6 @@ const rows = wanted.map((post) => ({
       ))}
     </tbody>
   </table>
-  <p class="empty-state" hidden={rows.length > 0}>No wanted posts yet. Check back soon or share one with the community.</p>
-  <p>Want something else? <a href="/submit">request it by posting</a>.</p>
+  <p class="empty-state" hidden={rows.length > 0}>No wanted skills yet. Check back soon.</p>
+  <p>Wanted entries are existing skills the community has flagged as ideas worth building.</p>
 </Base>

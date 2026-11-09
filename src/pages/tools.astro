@@ -1,6 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
-import ToolsCatalog from '../components/ToolsCatalog';
+import ToolsList from '../components/ToolsList';
 import { fetchTools } from '../lib/api';
 import type { ApiPageMeta, ApiTool } from '../lib/api';
 
@@ -25,14 +25,14 @@ try {
 }
 ---
 
-<Base title="ai tools" crumb="ai tools">
+<Base title="AI Tools">
   <header class="page-head">
-    <p class="eyebrow">ai tools catalog</p>
+    <p class="eyebrow">discover AI tools</p>
     <h1>AI Tools</h1>
     <p class="lede">
-      Providers, coding agents, and dev environments tracked by the community - synced daily from <a href="https://github.com/swegrowthid/tools-ai-swe-growth">tools-ai-swe-growth</a>.
+      Browse providers, coding agents, and dev environments. Synced daily from the <a href="https://github.com/swegrowthid/tools-ai-swe-growth">swegrowthid/tools-ai-swe-growth repo</a>.
     </p>
   </header>
 
-  <ToolsCatalog tools={tools} meta={meta} buildFailed={buildFailed} client:load />
+  <ToolsList tools={tools} meta={meta} buildFailed={buildFailed} client:load />
 </Base>
