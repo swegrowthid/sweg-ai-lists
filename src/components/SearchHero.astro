@@ -1,0 +1,33 @@
+<section class="home-hero">
+  <div class="home-hero-copy">
+    <p class="eyebrow">community-built · practical by design</p>
+    <h1>Useful AI workflows, shared openly.</h1>
+    <p class="lede">Search community skills or explore AI tools.</p>
+  </div>
+  <form class="hero-search" action="/skill/" method="get" role="search">
+    <label class="sr-only" for="search-type">Search in</label>
+    <select id="search-type" aria-label="Search in">
+      <option value="/skill/">Skills</option>
+      <option value="/tools/">Tools</option>
+    </select>
+    <input id="search-query" type="search" name="q" aria-label="Search skills" placeholder="Search skills" />
+    <button type="submit" aria-label="Search">Search</button>
+  </form>
+</section>
+
+<script>
+  const searchForm = document.querySelector<HTMLFormElement>('.hero-search');
+  const searchType = document.getElementById('search-type') as HTMLSelectElement | null;
+  const searchInput = document.getElementById('search-query') as HTMLInputElement | null;
+
+  function updateSearchTarget() {
+    if (!searchForm || !searchType || !searchInput) return;
+    const isTools = searchType.value === '/tools/';
+    searchForm.action = searchType.value;
+    searchInput.placeholder = isTools ? 'Search AI tools' : 'Search skills';
+    searchInput.setAttribute('aria-label', isTools ? 'Search AI tools' : 'Search skills');
+  }
+
+  searchType?.addEventListener('change', updateSearchTarget);
+  updateSearchTarget();
+</script>

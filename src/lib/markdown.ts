@@ -54,6 +54,17 @@ function tableCells(line: string): string[] {
   return line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim());
 }
 
+/** Plain-text excerpt for compact previews; full Markdown still renders below. */
+export function markdownToPlainText(source: string): string {
+  return source
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/[`*_~]/g, '')
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-+*]\s+|\d+[.)]\s+)/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Render common Markdown from the API without trusting embedded HTML or URLs. */
 export function markdownToSafeHtml(source: string): string {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');

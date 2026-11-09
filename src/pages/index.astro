@@ -1,38 +1,12 @@
 ---
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
-import { fetchCategories, fetchNews, fetchPosts, newsToRow, postToRow } from '../lib/api';
-import type { ApiCategory, ApiNews, ApiPost } from '../lib/api';
+import SearchHero from '../components/SearchHero.astro';
+import { fetchNews, fetchRecentDailyTerms, newsToRow } from '../lib/api';
+import type { ApiDailyTerm, ApiNews } from '../lib/api';
+import { markdownToPlainText, markdownToSafeHtml } from '../lib/markdown';
 
-let apiPosts: ApiPost[] = [];
-try {
-  apiPosts = await fetchPosts();
-} catch {
-  apiPosts = [];
-}
-let apiCategories: ApiCategory[] = [];
-try {
-  apiCategories = await fetchCategories();
-} catch {
-  apiCategories = [];
-}
-
-const rows = apiPosts
-  .map((post) => {
-    const row = postToRow(post);
-    const ts = Date.parse(post.created_at) || 0;
-    return {
-      ts,
-      row: { ...row, attrs: { ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) } },
-    };
-  })
-  .sort((a, b) => b.ts - a.ts)
-  .map((item) => item.row);
-
-const homeRowLimit = 5;
-const homeNewsLimit = 5;
-const homeCategoryLimit = 4;
-const categories = apiCategories.map((category) => ({ slug: category.slug, name: category.name }));
+const homeItemLimit = 4;
 
 let apiNews: ApiNews[] = [];
 try {
@@ -40,166 +14,63 @@ try {
 } catch {
   apiNews = [];
 }
-const newsRows = apiNews.map(newsToRow);
+const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
+
+let latestTerms: ApiDailyTerm[] = [];
+try {
+  latestTerms = await fetchRecentDailyTerms(homeItemLimit);
+} catch {
+  latestTerms = [];
+}
 ---
 
 <Base>
-  <section class="home-hero">
-    <div class="home-hero-copy">
-      <p class="eyebrow">community-built · practical by design</p>
-      <h1>Useful AI workflows, shared openly.</h1>
-      <p class="lede">Find posts where the community shares what works.</p>
-    </div>
-    <form class="hero-search" action="/skill" method="get" role="search">
-      <input type="search" name="q" aria-label="Search skills" placeholder="Search skills" />
-      <button type="submit" aria-label="Search">Search</button>
-    </form>
-  </section>
-
-  <section class="home-section" aria-labelledby="browse-heading">
-    <div class="section-heading">
-      <h2 id="browse-heading">Browse by category</h2>
-      <a href="/skill">all skills →</a>
-    </div>
-    <div class="category-grid" id="category-grid" data-limit={homeCategoryLimit}>
-      {categories.map((category, index) => (
-        <a class="category-link" data-slug={category.slug} href={`/s/${category.slug}`} hidden={index >= homeCategoryLimit}>
-          {category.name}<span class="arrow" aria-hidden="true">→</span>
-        </a>
-      ))}
-    </div>
-    <button
-      class="category-toggle"
-      id="category-toggle"
-      type="button"
-      aria-controls="category-grid"
-      aria-expanded="false"
-      hidden={categories.length <= homeCategoryLimit}
-    >
-      View all {categories.length} categories →
-    </button>
-  </section>
-
-  <section class="home-section" aria-labelledby="recent-heading">
-    <div class="section-heading">
-      <h2 id="recent-heading">Recently added</h2>
-      <a href="/skill">View all skills →</a>
-    </div>
-    <div id="home-rows" data-limit={homeRowLimit}>
-      <EntryRows rows={rows} limit={homeRowLimit} />
-    </div>
-    <p class="empty-state" id="home-empty" hidden={rows.length > 0}>No posts yet. Check back soon or share one with the community.</p>
-  </section>
+  <SearchHero />
 
   <section class="home-section" aria-labelledby="news-heading">
     <div class="section-heading">
-      <h2 id="news-heading">AI News Digest</h2>
+      <h2 id="news-heading">Recent AI News</h2>
       <a href="/news">View all news →</a>
     </div>
-    <div id="news-rows" data-limit={homeNewsLimit}>
-      <EntryRows rows={newsRows} limit={homeNewsLimit} />
+    <div id="news-rows" data-limit={homeItemLimit}>
+      <EntryRows rows={newsRows} />
     </div>
     <p class="empty-state" id="news-empty" hidden={newsRows.length > 0}>No digest posts yet.</p>
   </section>
 
+  <section class="home-section" aria-labelledby="daily-term-heading">
+    <div class="section-heading">
+      <h2 id="daily-term-heading">SWE Daily Term</h2>
+      <a href="/daily-terms/">Browse all terms →</a>
+    </div>
+    <div class="daily-terms" id="latest-daily-terms">
+      {latestTerms.map((term) => (
+        <details class="box daily-term">
+          <summary class="daily-term-summary">
+            <span class="eyebrow">{term.day > 0 ? `Day ${term.day}` : 'Daily term'}</span>
+            <span class="daily-term-title">{term.title}</span>
+            <span class="daily-term-preview">{markdownToPlainText(term.definition)}</span>
+          </summary>
+          <div class="daily-term-full">
+            <h3>Definition</h3>
+            <div class="daily-term-copy" set:html={markdownToSafeHtml(term.definition)} />
+            {term.example ? (
+              <>
+                <h3>Example</h3>
+                <div class="daily-term-copy" set:html={markdownToSafeHtml(term.example)} />
+              </>
+            ) : null}
+          </div>
+        </details>
+      ))}
+    </div>
+    <p class="empty-state" id="daily-term-empty" hidden={latestTerms.length > 0}>No daily terms are available yet.</p>
+  </section>
+
   <script>
-    import { fetchCategories, fetchNews, fetchPosts, postToRow } from '../lib/api';
+    import { fetchNews, fetchRecentDailyTerms } from '../lib/api';
     import { newsRowsHtml } from '../lib/news';
-    import { CATEGORY_NAME } from '../data/site';
-
-    const categoryGrid = document.getElementById('category-grid');
-    const categoryToggle = document.getElementById('category-toggle') as HTMLButtonElement | null;
-    const categoryLimit = Number(categoryGrid?.getAttribute('data-limit')) || 4;
-    let categoriesExpanded = false;
-
-    function updateCategoryVisibility() {
-      if (!categoryGrid || !categoryToggle) return;
-      const links = categoryGrid.querySelectorAll<HTMLAnchorElement>('a[data-slug]');
-      links.forEach((link, index) => {
-        link.hidden = !categoriesExpanded && index >= categoryLimit;
-      });
-      categoryToggle.hidden = links.length <= categoryLimit;
-      categoryToggle.setAttribute('aria-expanded', String(categoriesExpanded && links.length > categoryLimit));
-      categoryToggle.textContent = categoriesExpanded ? 'Show fewer categories ↑' : `View all ${links.length} categories →`;
-    }
-
-    categoryToggle?.addEventListener('click', () => {
-      categoriesExpanded = !categoriesExpanded;
-      updateCategoryVisibility();
-    });
-    updateCategoryVisibility();
-
-    function esc(value: string): string {
-      return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
-    }
-
-    function rowHtml(row: ReturnType<typeof postToRow>, ts: number): string {
-      const kind = row.attrs['data-kind'] ?? row.display;
-      const summary = row.summary && row.summary !== row.title ? `<span class="entry-summary">${esc(row.summary)}</span>` : '';
-      // Same label rule as EntryRows.astro, so a repaint cannot relabel a row.
-      const label = row.categoryLabel ?? CATEGORY_NAME[row.category] ?? row.category;
-      const attrs = Object.entries({ ...row.attrs, 'data-source': 'api', 'data-ts': String(ts) })
-        .map(([key, value]) => ` ${key}="${esc(value)}"`)
-        .join('');
-      return (
-        `<tr${attrs}><td class="d">${esc(row.date)}</td>` +
-        `<td class="entry-main"><a class="entry-title" href="${esc(row.url)}">${esc(row.title)}</a>` +
-        `<span class="entry-kind">${esc(kind)}</span>${summary}</td>` +
-        `<td class="c category-cell"><a href="/s/${encodeURIComponent(row.category)}">${esc(label)}</a></td>` +
-        `<td class="c author-cell">${esc(row.author)}</td>` +
-        `<td class="p"><span class="price">${esc(row.display)}</span></td></tr>`
-      );
-    }
-
-    async function refreshHome() {
-      let categories;
-      let posts;
-      try {
-        [categories, posts] = await Promise.all([fetchCategories(), fetchPosts()]);
-      } catch {
-        return; // Keep the build snapshot.
-      }
-
-      const grid = document.getElementById('category-grid');
-      if (grid) {
-        const categoryMap = new Map(categories.map((category) => [category.slug, category.name]));
-        grid.replaceChildren(
-          ...[...categoryMap].map(([slug, name]) => {
-            const link = document.createElement('a');
-            link.className = 'category-link';
-            link.dataset.slug = slug;
-            link.href = `/s/${encodeURIComponent(slug)}`;
-            link.append(document.createTextNode(name));
-            const arrow = document.createElement('span');
-            arrow.className = 'arrow';
-            arrow.setAttribute('aria-hidden', 'true');
-            arrow.textContent = '→';
-            link.append(arrow);
-            return link;
-          }),
-        );
-        updateCategoryVisibility();
-      }
-
-      const table = document.querySelector<HTMLTableElement>('#home-rows .rows');
-      const tbody = table?.tBodies[0];
-      if (!tbody) return;
-      const rowLimit = Number(document.getElementById('home-rows')?.getAttribute('data-limit')) || 5;
-      tbody.querySelectorAll('tr').forEach((row) => row.remove());
-      for (const post of posts) {
-        const row = postToRow(post);
-        const ts = Date.parse(post.created_at) || 0;
-        tbody.insertAdjacentHTML('beforeend', rowHtml(row, ts));
-      }
-      [...tbody.rows]
-        .sort((a, b) => Number(b.dataset.ts ?? 0) - Number(a.dataset.ts ?? 0))
-        .forEach((row, index) => {
-          tbody.append(row);
-          row.hidden = index >= rowLimit;
-        });
-      const empty = document.getElementById('home-empty');
-      if (empty) empty.hidden = tbody.rows.length > 0;
-    }
+    import { markdownToPlainText, markdownToSafeHtml } from '../lib/markdown';
 
     async function refreshNewsSection() {
       let entries;
@@ -210,13 +81,63 @@ const newsRows = apiNews.map(newsToRow);
       }
       const tbody = document.querySelector<HTMLTableSectionElement>('#news-rows .rows tbody');
       if (!tbody) return;
-      const limit = Number(document.getElementById('news-rows')?.getAttribute('data-limit')) || 5;
+      const limit = Number(document.getElementById('news-rows')?.getAttribute('data-limit')) || 4;
       tbody.innerHTML = newsRowsHtml(entries, limit);
       const empty = document.getElementById('news-empty');
       if (empty) empty.hidden = entries.length > 0;
     }
 
-    void refreshHome();
+    async function refreshDailyTerm() {
+      let terms;
+      try {
+        terms = await fetchRecentDailyTerms(4);
+      } catch {
+        return; // Keep the build snapshot.
+      }
+      const list = document.getElementById('latest-daily-terms');
+      const empty = document.getElementById('daily-term-empty');
+      if (!list || !empty) return;
+      list.replaceChildren();
+      for (const term of terms) {
+        const card = document.createElement('details');
+        card.className = 'box daily-term';
+        const summary = document.createElement('summary');
+        summary.className = 'daily-term-summary';
+        const day = document.createElement('span');
+        day.className = 'eyebrow';
+        day.textContent = term.day > 0 ? `Day ${term.day}` : 'Daily term';
+        const title = document.createElement('span');
+        title.className = 'daily-term-title';
+        title.textContent = term.title;
+        const preview = document.createElement('span');
+        preview.className = 'daily-term-preview';
+        preview.textContent = markdownToPlainText(term.definition);
+        summary.append(day, title, preview);
+        card.append(summary);
+
+        const full = document.createElement('div');
+        full.className = 'daily-term-full';
+        const definitionLabel = document.createElement('h3');
+        definitionLabel.textContent = 'Definition';
+        const definition = document.createElement('div');
+        definition.className = 'daily-term-copy';
+        definition.innerHTML = markdownToSafeHtml(term.definition);
+        full.append(definitionLabel, definition);
+        if (term.example) {
+          const exampleLabel = document.createElement('h3');
+          exampleLabel.textContent = 'Example';
+          const example = document.createElement('div');
+          example.className = 'daily-term-copy';
+          example.innerHTML = markdownToSafeHtml(term.example);
+          full.append(exampleLabel, example);
+        }
+        card.append(full);
+        list.append(card);
+      }
+      empty.hidden = terms.length > 0;
+    }
+
     void refreshNewsSection();
+    void refreshDailyTerm();
   </script>
 </Base>

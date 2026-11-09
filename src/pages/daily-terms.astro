@@ -2,7 +2,7 @@
 import Base from '../layouts/Base.astro';
 import { fetchDailyTermMonths, fetchDailyTerms } from '../lib/api';
 import type { ApiDailyTerm, ApiDailyTermMonth } from '../lib/api';
-import { markdownToSafeHtml } from '../lib/markdown';
+import { markdownToPlainText, markdownToSafeHtml } from '../lib/markdown';
 
 let months: ApiDailyTermMonth[] = [];
 let terms: ApiDailyTerm[] = [];
@@ -35,15 +35,37 @@ try {
   </header>
 
   <div class="field daily-term-month">
-    <label for="daily-term-month">Month</label>
-    <select id="daily-term-month" aria-label="Choose a month">
-      <option value="">Latest available</option>
-      {months.map((month) => (
-        <option value={month.month_key} selected={month.month_key === activeMonth?.month_key}>
-          {month.name} {month.year} ({month.count})
-        </option>
-      ))}
-    </select>
+    <span class="daily-term-month-label">Month</span>
+    <div
+      class="daily-month-picker"
+      id="daily-month-picker"
+      data-months={JSON.stringify(months)}
+      data-selected-month={activeMonth?.month_key ?? ''}
+    >
+      <button
+        class="daily-month-trigger"
+        id="daily-month-trigger"
+        type="button"
+        aria-label="Choose a month"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="daily-month-dialog"
+      >
+        <span id="daily-month-value">{activeMonth ? `${activeMonth.name} ${activeMonth.year}` : 'Choose a month'}</span>
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+          <rect x="2.5" y="4.5" width="15" height="13" rx="2" stroke="currentColor" stroke-width="1.5" />
+          <path d="M6 2.5v4M14 2.5v4M3 8h14" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </button>
+      <div class="daily-month-dialog" id="daily-month-dialog" role="dialog" aria-label="Choose a month" hidden>
+        <div class="daily-month-year">
+          <button id="daily-month-prev" type="button" aria-label="Previous year">‹</button>
+          <strong id="daily-month-year"></strong>
+          <button id="daily-month-next" type="button" aria-label="Next year">›</button>
+        </div>
+        <div class="daily-month-grid" id="daily-month-grid" role="group" aria-label="Months"></div>
+      </div>
+    </div>
   </div>
 
   <p class="daily-term-meta" id="daily-term-meta" aria-live="polite">
@@ -57,18 +79,23 @@ try {
   <div class="daily-terms" id="daily-terms">
     {
       terms.map((term) => (
-        <article class="box daily-term">
-          <p class="eyebrow">{term.day > 0 ? `Day ${term.day}` : 'Daily term'}</p>
-          <h2>{term.title}</h2>
-          <h3>Definition</h3>
-          <div class="daily-term-copy" set:html={markdownToSafeHtml(term.definition)} />
-          {term.example ? (
-            <>
-              <h3>Example</h3>
-              <div class="daily-term-copy" set:html={markdownToSafeHtml(term.example)} />
-            </>
-          ) : null}
-        </article>
+        <details class="box daily-term" id={`term-${term.slug}`}>
+          <summary class="daily-term-summary">
+            <span class="eyebrow">{term.day > 0 ? `Day ${term.day}` : 'Daily term'}</span>
+            <span class="daily-term-title">{term.title}</span>
+            <span class="daily-term-preview">{markdownToPlainText(term.definition)}</span>
+          </summary>
+          <div class="daily-term-full">
+            <h3>Definition</h3>
+            <div class="daily-term-copy" set:html={markdownToSafeHtml(term.definition)} />
+            {term.example ? (
+              <>
+                <h3>Example</h3>
+                <div class="daily-term-copy" set:html={markdownToSafeHtml(term.example)} />
+              </>
+            ) : null}
+          </div>
+        </details>
       ))
     }
   </div>
@@ -79,60 +106,130 @@ try {
   <script>
     import { fetchDailyTermMonths, fetchDailyTerms } from '../lib/api';
     import type { ApiDailyTerm, ApiDailyTermMonth } from '../lib/api';
-    import { markdownToSafeHtml } from '../lib/markdown';
+    import { markdownToPlainText, markdownToSafeHtml } from '../lib/markdown';
 
-    const selector = document.getElementById('daily-term-month') as HTMLSelectElement | null;
+    const picker = document.getElementById('daily-month-picker');
+    const trigger = document.getElementById('daily-month-trigger') as HTMLButtonElement | null;
+    const pickerDialog = document.getElementById('daily-month-dialog');
+    const pickerValue = document.getElementById('daily-month-value');
+    const pickerYear = document.getElementById('daily-month-year');
+    const monthGrid = document.getElementById('daily-month-grid');
+    const previousYear = document.getElementById('daily-month-prev') as HTMLButtonElement | null;
+    const nextYear = document.getElementById('daily-month-next') as HTMLButtonElement | null;
     const list = document.getElementById('daily-terms');
     const status = document.getElementById('daily-term-meta');
     const empty = document.getElementById('daily-terms-empty');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    let availableMonths = (JSON.parse(picker?.getAttribute('data-months') ?? '[]') as ApiDailyTermMonth[]);
+    let selectedMonth = picker?.getAttribute('data-selected-month') ?? '';
+    let viewYear = Number(selectedMonth.slice(0, 4)) || new Date().getFullYear();
+
+    function renderMonthPicker(): void {
+      if (!monthGrid || !pickerYear || !previousYear || !nextYear) return;
+      const years = availableMonths.map((month) => month.year);
+      const minYear = Math.min(...years, viewYear);
+      const maxYear = Math.max(...years, viewYear);
+      pickerYear.textContent = String(viewYear);
+      previousYear.disabled = viewYear <= minYear;
+      nextYear.disabled = viewYear >= maxYear;
+      monthGrid.replaceChildren(...monthNames.map((name, index) => {
+        const monthNumber = index + 1;
+        const key = `${viewYear}-${String(monthNumber).padStart(2, '0')}`;
+        const month = availableMonths.find((item) => item.month_key === key);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'daily-month-option';
+        button.textContent = name;
+        button.disabled = !month;
+        button.setAttribute('aria-pressed', String(key === selectedMonth));
+        if (month) {
+          button.title = `${month.name} ${month.year} (${month.count} terms)`;
+          button.addEventListener('click', () => {
+            closeMonthPicker();
+            void loadMonth(key);
+          });
+        }
+        return button;
+      }));
+    }
+
+    function openMonthPicker(open: boolean): void {
+      if (!pickerDialog || !trigger) return;
+      pickerDialog.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) renderMonthPicker();
+    }
+
+    function closeMonthPicker(): void {
+      openMonthPicker(false);
+    }
+
+    function updateSelectedMonth(month: ApiDailyTermMonth): void {
+      selectedMonth = month.month_key;
+      viewYear = month.year;
+      if (pickerValue) pickerValue.textContent = `${month.name} ${month.year}`;
+      renderMonthPicker();
+    }
 
     function appendTerm(parent: HTMLElement, term: ApiDailyTerm): void {
-      const card = document.createElement('article');
+      const card = document.createElement('details');
       card.className = 'box daily-term';
+      card.id = `term-${term.slug}`;
 
-      const day = document.createElement('p');
+      const summary = document.createElement('summary');
+      summary.className = 'daily-term-summary';
+      const day = document.createElement('span');
       day.className = 'eyebrow';
       day.textContent = term.day > 0 ? `Day ${term.day}` : 'Daily term';
-      card.append(day);
+      summary.append(day);
 
-      const title = document.createElement('h2');
+      const title = document.createElement('span');
+      title.className = 'daily-term-title';
       title.textContent = term.title;
-      card.append(title);
+      summary.append(title);
 
+      const preview = document.createElement('span');
+      preview.className = 'daily-term-preview';
+      preview.textContent = markdownToPlainText(term.definition);
+      summary.append(preview);
+      card.append(summary);
+
+      const full = document.createElement('div');
+      full.className = 'daily-term-full';
       const definitionLabel = document.createElement('h3');
       definitionLabel.textContent = 'Definition';
-      card.append(definitionLabel);
+      full.append(definitionLabel);
       const definition = document.createElement('div');
       definition.className = 'daily-term-copy';
       definition.innerHTML = markdownToSafeHtml(term.definition);
-      card.append(definition);
+      full.append(definition);
 
       if (term.example) {
         const exampleLabel = document.createElement('h3');
         exampleLabel.textContent = 'Example';
-        card.append(exampleLabel);
+        full.append(exampleLabel);
         const example = document.createElement('div');
         example.className = 'daily-term-copy';
         example.innerHTML = markdownToSafeHtml(term.example);
-        card.append(example);
+        full.append(example);
       }
 
+      card.append(full);
       parent.append(card);
     }
 
-    function updateMonths(months: ApiDailyTermMonth[], selected: string): void {
-      if (!selector) return;
-      const latest = document.createElement('option');
-      latest.value = '';
-      latest.textContent = 'Latest available';
-      selector.replaceChildren(latest);
-      for (const month of months) {
-        const option = document.createElement('option');
-        option.value = month.month_key;
-        option.textContent = `${month.name} ${month.year} (${month.count})`;
-        selector.append(option);
+    function openTermFromHash(): void {
+      if (!location.hash) return;
+      let id: string;
+      try {
+        id = decodeURIComponent(location.hash.slice(1));
+      } catch {
+        return;
       }
-      selector.value = selected;
+      const term = document.getElementById(id);
+      if (!(term instanceof HTMLDetailsElement)) return;
+      term.open = true;
+      term.scrollIntoView();
     }
 
     function updateMeta(month: ApiDailyTermMonth): void {
@@ -146,20 +243,21 @@ try {
       status.append(source);
     }
 
-    async function loadMonth(month?: string): Promise<void> {
+    async function loadMonth(month?: string, refreshMonths = false): Promise<void> {
       if (!list || !empty || !status) return;
       status.textContent = 'Loading daily terms…';
       try {
         const [available, page] = await Promise.all([
-          fetchDailyTermMonths(),
+          refreshMonths ? fetchDailyTermMonths().catch(() => null) : Promise.resolve(null),
           fetchDailyTerms(month),
         ]);
-        const selected = month ?? page.meta.month_key;
-        updateMonths(available, selected);
+        if (available) availableMonths = available;
+        updateSelectedMonth(page.meta);
         list.replaceChildren();
         for (const term of page.data) appendTerm(list, term);
         empty.hidden = page.data.length > 0;
         updateMeta(page.meta);
+        openTermFromHash();
         const url = new URL(location.href);
         if (month) url.searchParams.set('month', month);
         else url.searchParams.delete('month');
@@ -169,8 +267,25 @@ try {
       }
     }
 
-    selector?.addEventListener('change', () => void loadMonth(selector.value || undefined));
+    trigger?.addEventListener('click', () => openMonthPicker(pickerDialog?.hidden === true));
+    previousYear?.addEventListener('click', () => {
+      viewYear -= 1;
+      renderMonthPicker();
+    });
+    nextYear?.addEventListener('click', () => {
+      viewYear += 1;
+      renderMonthPicker();
+    });
+    document.addEventListener('pointerdown', (event) => {
+      if (picker && event.target instanceof Node && !picker.contains(event.target)) closeMonthPicker();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && pickerDialog && !pickerDialog.hidden) {
+        closeMonthPicker();
+        trigger?.focus();
+      }
+    });
     const requestedMonth = new URLSearchParams(location.search).get('month');
-    void loadMonth(requestedMonth || undefined);
+    void loadMonth(requestedMonth || undefined, true);
   </script>
 </Base>
