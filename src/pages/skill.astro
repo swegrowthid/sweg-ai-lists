@@ -78,6 +78,9 @@ for (const cat of apiCategories) {
   <p class="empty-state" id="empty" hidden>No results match those filters.</p>
 
   <script>
+    import { fetchPosts } from '../lib/api';
+    import { postRowsHtml } from '../lib/posts';
+
     // Re-run on every same-document navigation so back/forward restores the
     // filtered view instead of the unfiltered list.
     function applyFilters() {
@@ -115,7 +118,27 @@ for (const cat of apiCategories) {
       if (empty) empty.hidden = shown > 0;
     }
 
+    // The list is baked at build time; refresh it once so posts created since
+    // the last deploy appear without a rebuild. Failure keeps the snapshot.
+    async function refreshPosts() {
+      let posts;
+      try {
+        posts = await fetchPosts();
+      } catch {
+        return;
+      }
+      const tbody = document.querySelector<HTMLTableSectionElement>('#results .rows tbody');
+      if (!tbody) return;
+      posts.sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
+      tbody.innerHTML = postRowsHtml(posts, (post) => ({
+        'data-source': 'api',
+        'data-ts': String(Date.parse(post.created_at) || 0),
+      }));
+      applyFilters();
+    }
+
     applyFilters();
+    void refreshPosts();
     document.addEventListener('astro:after-swap', applyFilters);
   </script>
 </Base>

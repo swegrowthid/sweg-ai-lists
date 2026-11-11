@@ -4,6 +4,7 @@
 
 import { z } from 'astro/zod';
 import { CATEGORY_NAME } from '../data/site';
+import { markdownToPlainText } from './markdown';
 
 /** Build-time override: `PUBLIC_SWEG_API_BASE=http://127.0.0.1:8080 bun run build`.
  *  Defaults to the live host so the static build works with no env set.
@@ -52,12 +53,10 @@ const CategorySchema = z.object({
 
 const PostItemSchema = z.object({
   id: z.string(),
-  kind: z.enum(['markdown', 'text', 'link', 'file']),
   position: z.number(),
-  body_text: z.string().optional(),
-  url: z.string().optional(),
-  filename: z.string().optional(),
-  mime: z.string().optional(),
+  /** The full post body (markdown), byte-exact. A post carries exactly one
+   *  item at position 0. */
+  value: z.string(),
 });
 
 const PostSchema = z.object({
@@ -89,35 +88,6 @@ const NewsSchema = z.object({
   updated_at: z.string(),
 });
 
-const DailyTermSchema = z.object({
-  id: z.string(),
-  year: z.number(),
-  month: z.number(),
-  month_key: z.string(),
-  day: z.number(),
-  slug: z.string(),
-  title: z.string(),
-  definition: z.string(),
-  example: z.string(),
-  source_file: z.string(),
-  source_url: z.string(),
-});
-
-const DailyTermMonthSchema = z.object({
-  month_key: z.string(),
-  name: z.string(),
-  year: z.number(),
-  month: z.number(),
-  source_file: z.string(),
-  source_url: z.string(),
-  count: z.number(),
-});
-
-const DailyTermListSchema = z.object({
-  data: z.array(z.unknown()),
-  meta: DailyTermMonthSchema,
-});
-
 const ToolSchema = z.object({
   /** Source-table id, PREFIX-NNN: P = providers, CA = coding-agents, ADE = ade. */
   id: z.string(),
@@ -135,6 +105,20 @@ const ToolSchema = z.object({
   min_spend: z.string().optional(),
   /** ADE only: entries from the source "AI Features" cell. */
   ai_features: z.array(z.string()).optional(),
+  /** Total votes the tool has. Always present, minimum 0. */
+  votes: z.number(),
+  /** True when the caller's token already voted this tool; false for
+   *  anonymous or invalid tokens. */
+  voted: z.boolean(),
+});
+
+/** What POST/DELETE /tools/{id}/votes answer: the row's fresh count and the
+ *  caller's vote state after the operation. Apply it verbatim - no optimistic
+ *  counting beside the server's. */
+const VoteResultSchema = z.object({
+  tool_id: z.string(),
+  votes: z.number(),
+  voted: z.boolean(),
 });
 
 const ToolCategorySchema = z.object({
@@ -191,11 +175,10 @@ export type ApiCategory = z.infer<typeof CategorySchema>;
 export type ApiPostItem = z.infer<typeof PostItemSchema>;
 export type ApiPost = z.infer<typeof PostSchema>;
 export type ApiNews = z.infer<typeof NewsSchema>;
-export type ApiDailyTerm = z.infer<typeof DailyTermSchema>;
-export type ApiDailyTermMonth = z.infer<typeof DailyTermMonthSchema>;
 export type ApiTool = z.infer<typeof ToolSchema>;
 export type ApiToolCategory = z.infer<typeof ToolCategorySchema>;
 export type ApiPageMeta = z.infer<typeof PageMetaSchema>;
+export type ApiVoteResult = z.infer<typeof VoteResultSchema>;
 
 /** One page of tools plus the paging metadata for the rest. */
 export interface ApiToolPage {
@@ -204,7 +187,6 @@ export interface ApiToolPage {
 }
 export type TokenPair = z.infer<typeof TokenPairSchema>;
 export type ApiUser = z.infer<typeof UserSchema>;
-export type ItemKind = ApiPostItem['kind'];
 
 // --- request shapes ----------------------------------------------------------
 // Built here, never parsed from a response, so they are plain types.
@@ -220,8 +202,10 @@ export interface CreatePostInput {
   title: string;
   /** Slug of an existing category - top-level or one of its derivatives. */
   category: string;
-  /** Array order is display order. Send only the fields owned by each `kind`. */
-  items: { kind: ItemKind; body_text?: string; url?: string; filename?: string; mime?: string }[];
+  /** Optional derivative slug; must be a child of `category`. */
+  derivative?: string;
+  /** The full post body (markdown), byte-exact, max 64 KiB. */
+  value: string;
 }
 
 /** A row shaped for EntryRows.astro: `{ url, title, summary, category, author, display, date, attrs? }`. */
@@ -333,53 +317,9 @@ export async function fetchWanted(fetchImpl?: FetchLike): Promise<ApiPost[]> {
 }
 
 /** Public digest feed, newest `published_at` first. Read-only: the API fills it
- *  by daily sync, so callers only ever GET it. */
+ *  by a sync that runs every day, so callers only ever GET it. */
 export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
   return toRows(NewsSchema, await apiFetch<unknown>('/news', { fetchImpl }), '/news');
-}
-
-export interface ApiDailyTermPage {
-  data: ApiDailyTerm[];
-  meta: ApiDailyTermMonth;
-}
-
-export async function fetchDailyTermMonths(fetchImpl?: FetchLike): Promise<ApiDailyTermMonth[]> {
-  return toRows(
-    DailyTermMonthSchema,
-    await apiFetch<unknown>('/daily-terms/months', { fetchImpl }),
-    '/daily-terms/months',
-  );
-}
-
-export async function fetchDailyTerms(month?: string, fetchImpl?: FetchLike): Promise<ApiDailyTermPage> {
-  const path = month ? `/daily-terms?month=${encodeURIComponent(month)}` : '/daily-terms';
-  const raw = toOne(DailyTermListSchema, await apiFetch<unknown>(path, { fetchImpl }), '/daily-terms');
-  return {
-    data: toRows(DailyTermSchema, raw.data, '/daily-terms').sort(
-      (a, b) => b.year - a.year || b.month - a.month || b.day - a.day,
-    ),
-    meta: raw.meta,
-  };
-}
-
-/** Recent terms can cross a month boundary when the latest month has fewer
- *  than the requested number of entries. */
-export async function fetchRecentDailyTerms(limit: number, fetchImpl?: FetchLike): Promise<ApiDailyTerm[]> {
-  const latest = await fetchDailyTerms(undefined, fetchImpl);
-  const terms = [...latest.data];
-  if (terms.length < limit) {
-    const months = await fetchDailyTermMonths(fetchImpl);
-    const previousMonths = months
-      .map((month) => month.month_key)
-      .filter((month) => month < latest.meta.month_key)
-      .sort()
-      .reverse();
-    for (const month of previousMonths) {
-      if (terms.length >= limit) break;
-      terms.push(...(await fetchDailyTerms(month, fetchImpl)).data);
-    }
-  }
-  return terms.slice(0, limit);
 }
 
 export interface ToolQuery {
@@ -391,7 +331,8 @@ export interface ToolQuery {
   /** Case-insensitive substring of name, website label, status, min spend,
    *  and AI features. */
   q?: string;
-  /** Sort key: `name` or `updated`. Empty keeps the source order. */
+  /** Sort key: `name`, `updated` or `votes`. Empty keeps the source order.
+   *  `votes` defaults to `desc` when `order` is omitted. */
   sort?: string;
   /** Sort direction, `asc` or `desc`. Only read when `sort` is set. */
   order?: string;
@@ -409,6 +350,7 @@ export async function fetchTools(
   query: ToolQuery = {},
   fetchImpl?: FetchLike,
   signal?: AbortSignal,
+  token?: string,
 ): Promise<ApiToolPage> {
   const params = new URLSearchParams();
   if (query.group) params.set('group', query.group);
@@ -420,8 +362,24 @@ export async function fetchTools(
   if (query.perPage) params.set('per_page', String(query.perPage));
   const search = params.toString();
   const path = search ? `/tools?${search}` : '/tools';
-  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl, signal }), '/tools');
+  // The Bearer is optional here: with a live token the rows' `voted` flags
+  // come back personalized; the API treats a missing or dead token as
+  // anonymous and still answers 200.
+  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl, signal, token }), '/tools');
   return { data: toRows(ToolSchema, raw.data, '/tools'), meta: raw.meta };
+}
+
+/** One vote per user per tool; a repeat POST is an idempotent 200 with the
+ *  same VoteResult body as a fresh 201. */
+export async function voteTool(id: string, token: string, fetchImpl?: FetchLike): Promise<ApiVoteResult> {
+  const path = `/tools/${encodeURIComponent(id)}/votes`;
+  return toOne(VoteResultSchema, await apiFetch<unknown>(path, { method: 'POST', token, fetchImpl }), path);
+}
+
+/** Idempotent: always 200 with the latest VoteResult, vote or not. */
+export async function unvoteTool(id: string, token: string, fetchImpl?: FetchLike): Promise<ApiVoteResult> {
+  const path = `/tools/${encodeURIComponent(id)}/votes`;
+  return toOne(VoteResultSchema, await apiFetch<unknown>(path, { method: 'DELETE', token, fetchImpl }), path);
 }
 
 export async function fetchToolCategories(fetchImpl?: FetchLike): Promise<ApiToolCategory[]> {
@@ -537,11 +495,10 @@ export async function createCategory(
 
 const SUMMARY_MAX = 140;
 
-/** Opening of the first markdown/text item, otherwise the title. Runs of
+/** Opening of the post body as plain text, otherwise the title. Runs of
  *  whitespace collapse so a snippet of body text reads as one line. */
 export function postSummary(post: ApiPost): string {
-  const body = post.items?.find((item) => item.kind === 'markdown' || item.kind === 'text')?.body_text;
-  const text = (body ?? '').replace(/\s+/g, ' ').trim();
+  const text = markdownToPlainText(post.items?.[0]?.value ?? '');
   if (!text) return post.title;
   return text.length > SUMMARY_MAX ? text.slice(0, SUMMARY_MAX).trimEnd() : text;
 }

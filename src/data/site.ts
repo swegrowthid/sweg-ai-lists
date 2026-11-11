@@ -36,10 +36,7 @@ export const NAV = [
     { href: '/tools', label: 'AI Tools' },
     { href: '/wanted', label: 'Wanted List', badge: true },
   ],
-  [
-    { href: '/news', label: 'AI News Digest' },
-    { href: '/daily-terms', label: 'SWE Daily Term' },
-  ],
+  [{ href: '/news', label: 'AI News Digest' }],
   [{ href: '/help', label: 'What is This Web?' }],
 ];
 

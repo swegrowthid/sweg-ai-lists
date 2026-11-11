@@ -1,12 +1,16 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import {
+  ApiError,
   fetchToolCategories,
   fetchTools,
   toolToRow,
+  unvoteTool,
+  voteTool,
   TOOL_CATEGORY_NAME,
   TOOL_GROUP_VALUE,
 } from '../lib/api';
 import type { ApiPageMeta, ApiRow, ApiTool, ToolQuery } from '../lib/api';
+import { ensurePair, handleExpiredSession, isTokenExpired, storedPair } from '../lib/session';
 
 /** Rows per request. Matches the prerendered page size and stays under the
  *  API cap of 100. */
@@ -51,6 +55,8 @@ const SORT_OPTIONS = [
   { value: 'name|desc', label: 'name z-a' },
   { value: 'updated|desc', label: 'newest first' },
   { value: 'updated|asc', label: 'oldest first' },
+  { value: 'votes|desc', label: 'most votes' },
+  { value: 'votes|asc', label: 'fewest votes' },
 ] as const;
 
 type SortValue = (typeof SORT_OPTIONS)[number]['value'];
@@ -75,7 +81,13 @@ function readParams(): Params {
   const rawGroup = params.get('group') ?? params.get('category') ?? '';
   const group = TOOL_GROUP_VALUE[rawGroup] ?? rawGroup;
   const key = params.get('sort') ?? '';
-  const dir = params.get('order') === 'desc' ? 'desc' : 'asc';
+  // `votes` without an explicit order follows the API's default: desc.
+  const dir =
+    params.get('order') === 'desc' || params.get('order') === 'asc'
+      ? (params.get('order') as 'desc' | 'asc')
+      : key === 'votes'
+        ? 'desc'
+        : 'asc';
   const parsed = Number.parseInt(params.get('page') ?? '1', 10);
   return {
     q: params.get('q') ?? '',
@@ -132,8 +144,21 @@ function pageItems(current: number, total: number): (number | '...')[] {
 }
 
 /** One table row in the exact shape EntryRows renders, so the tools list looks
- *  like every other list on the site. */
-function Row({ row }: { row: ApiRow }) {
+ *  like every other list on the site. The votes column sits last: anonymous
+ *  visitors get the plain count, a logged-in session gets the toggle. */
+function Row({
+  row,
+  tool,
+  signedIn,
+  pending,
+  onToggle,
+}: {
+  row: ApiRow;
+  tool: ApiTool;
+  signedIn: boolean;
+  pending: boolean;
+  onToggle: (tool: ApiTool) => void;
+}) {
   return (
     <tr {...row.attrs}>
       <td className="d">{row.date}</td>
@@ -154,6 +179,21 @@ function Row({ row }: { row: ApiRow }) {
       <td className="c author-cell">{row.author}</td>
       <td className="p">
         <span className="price">{row.display}</span>
+      </td>
+      <td className="c votes-cell">
+        {signedIn ? (
+          <button
+            type="button"
+            className="chip vote-chip"
+            aria-pressed={tool.voted}
+            disabled={pending}
+            onClick={() => onToggle(tool)}
+          >
+            {tool.voted ? 'voted' : 'vote'} · {tool.votes}
+          </button>
+        ) : (
+          <span>{tool.votes === 1 ? '1 vote' : `${tool.votes} votes`}</span>
+        )}
       </td>
     </tr>
   );
@@ -180,6 +220,9 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
   const [query, setQuery] = useState<Params>({ q: '', group: '', sort: '', page: 1 });
   const [attempt, setAttempt] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  const [pendingVote, setPendingVote] = useState<string | null>(null);
+  const [voteError, setVoteError] = useState('');
 
   // The URL is the query state: apply it once on entry, then keep it in sync.
   useEffect(() => {
@@ -187,6 +230,7 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
     setInput(params.q);
     setQuery(params);
     history.replaceState(null, '', hrefFor(params));
+    setSignedIn(!!storedPair()?.access_token);
     setHydrated(true);
   }, []);
 
@@ -208,7 +252,7 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
     const controller = new AbortController();
     setBusy(true);
     setAttempted(true);
-    fetchTools(apiQuery(query), undefined, controller.signal)
+    fetchTools(apiQuery(query), undefined, controller.signal, storedPair()?.access_token)
       .then((result) => {
         if (controller.signal.aborted) return;
         setRows(result.data);
@@ -309,13 +353,46 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
     setQuery(next);
   }
 
+  // The VoteResult body is authoritative: votes and voted land on the row
+  // verbatim, so there is no optimistic count to reconcile later.
+  async function toggleVote(tool: ApiTool): Promise<void> {
+    if (pendingVote) return;
+    setVoteError('');
+    const hadTokens = !!storedPair();
+    setPendingVote(tool.id);
+    try {
+      const pair = await ensurePair();
+      if (!pair?.access_token) {
+        // The control only renders for a logged-in session, so a dead pair
+        // here is always an expired session: clear it and force a fresh login.
+        if (hadTokens) handleExpiredSession();
+        return;
+      }
+      const result = tool.voted
+        ? await unvoteTool(tool.id, pair.access_token)
+        : await voteTool(tool.id, pair.access_token);
+      setRows((current) =>
+        current.map((row) => (row.id === tool.id ? { ...row, votes: result.votes, voted: result.voted } : row)),
+      );
+    } catch (error) {
+      if (isTokenExpired(error)) {
+        handleExpiredSession();
+        return;
+      }
+      setVoteError(
+        error instanceof ApiError ? error.message : 'could not reach the API - the vote is not counted.',
+      );
+    } finally {
+      setPendingVote(null);
+    }
+  }
+
   const viewMeta = pageMeta ?? { page: 1, per_page: PAGE_SIZE, total: rows.length, total_pages: rows.length ? 1 : 0 };
   const needle = query.q.trim();
   const hint = GROUPS.find((g) => g.value === query.group)?.hint ?? '';
   const note = [needle && `"${needle}"`, query.group && GROUPS.find((g) => g.value === query.group)?.label]
     .filter(Boolean)
     .join(' ');
-  const rowViews = rows.map((tool) => toolToRow(tool, TOOL_CATEGORY_NAME[tool.category]));
 
   return (
     <>
@@ -372,6 +449,12 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
         }`}
       </p>
 
+      {voteError ? (
+        <p className="small err" role="alert">
+          {voteError}
+        </p>
+      ) : null}
+
       {status === 'degraded' ? (
         <div className="notice" role="status">
           <p>
@@ -387,11 +470,18 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
         </div>
       ) : null}
 
-      {rowViews.length > 0 ? (
+      {rows.length > 0 ? (
         <table className="rows" aria-busy={busy}>
           <tbody>
-            {rowViews.map((row) => (
-              <Row key={row.attrs['data-tool-id'] ?? row.title} row={row} />
+            {rows.map((tool) => (
+              <Row
+                key={tool.id}
+                row={toolToRow(tool, TOOL_CATEGORY_NAME[tool.category])}
+                tool={tool}
+                signedIn={signedIn}
+                pending={pendingVote !== null}
+                onToggle={toggleVote}
+              />
             ))}
           </tbody>
         </table>
