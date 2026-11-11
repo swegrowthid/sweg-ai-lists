@@ -1,0 +1,234 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Edit post">
+  <header class="page-head">
+    <p class="eyebrow">your skill</p>
+    <h1>Edit post</h1>
+    <p class="lede">Update your post.</p>
+  </header>
+
+  <p class="muted" id="checking">loading post…</p>
+
+  <p id="guest" hidden>
+    You are not logged in. <a href="/login" id="guest-login">log in</a> or <a href="/register">register</a>.
+  </p>
+
+  <p class="muted" id="missing" hidden>
+    no post selected - <a href="/">browse the list</a>.
+  </p>
+
+  <p class="muted" id="denied" hidden>
+    only the author can edit this post - <a href="/" id="denied-back">back to the post</a>.
+  </p>
+
+  <form class="form" id="edit-form" hidden>
+    <div class="row">
+      <label for="title">title</label>
+      <input type="text" id="title" name="title" maxlength="200" required />
+      <p class="small">the slug stays the same.</p>
+    </div>
+    <div class="row">
+      <label for="category">category</label>
+      <input type="text" id="category" name="category" list="category-list" maxlength="100" required />
+      <datalist id="category-list"></datalist>
+      <p class="small" id="category-hint">any slug - top-level like <code>coding</code> or a derivative like <code>claude-code</code>.</p>
+    </div>
+    <div class="row">
+      <label for="value">body</label>
+      <textarea id="value" name="value" rows="12" maxlength="65536" required></textarea>
+      <p class="small">the full post body in markdown - up to 64 KiB.</p>
+    </div>
+    <div class="actions">
+      <button type="submit" id="save">save</button>
+      · <a href="/" id="cancel">cancel</a>
+    </div>
+    <p class="small" id="status" aria-live="polite" hidden></p>
+  </form>
+
+  <script>
+    import { ApiError, fetchCategories, fetchPost, updatePost } from '../lib/api';
+    import type { ApiPost, UpdatePostInput } from '../lib/api';
+    import { goInternal } from '../lib/nav';
+    import { claims, ensurePair, handleExpiredSession, isTokenExpired, storedPair } from '../lib/session';
+    import type { EnsuredPair } from '../lib/session';
+
+    // Element lookups are typed here; the markup above owns these ids.
+    function byId<T extends HTMLElement>(id: string): T {
+      return document.getElementById(id) as T;
+    }
+
+    const form = byId<HTMLFormElement>('edit-form');
+    const checking = byId<HTMLParagraphElement>('checking');
+    const status = byId<HTMLParagraphElement>('status');
+    const save = byId<HTMLButtonElement>('save');
+
+    function setStatus(text: string, cls: string) {
+      status.className = cls;
+      status.textContent = text;
+      status.hidden = false;
+    }
+
+    // The loading line gives way to exactly one panel or the form.
+    function swapTo(id: string) {
+      checking.hidden = true;
+      byId<HTMLElement>(id).hidden = false;
+    }
+
+    // The body goes byte-exact - the API trims only for its blank check.
+    function payload(): UpdatePostInput {
+      return {
+        title: byId<HTMLInputElement>('title').value.trim(),
+        category: byId<HTMLInputElement>('category').value.trim(),
+        value: byId<HTMLTextAreaElement>('value').value,
+      };
+    }
+
+    // Category slugs come from the API; the datalist keeps the input usable
+    // when the fetch cannot run (offline, or a CORS-blocked cross-origin deploy).
+    async function loadCategories() {
+      const hint = byId<HTMLParagraphElement>('category-hint');
+      try {
+        const categories = await fetchCategories();
+        const list = byId<HTMLDataListElement>('category-list');
+        // One field accepts every slug - parents and derivatives alike; the
+        // API resolves a derivative to its parent on its own.
+        list.replaceChildren(...categories.map((c) => new Option(c.slug, c.slug)));
+        hint.textContent = `${categories.length} slugs loaded - parents and derivatives accepted.`;
+      } catch {
+        hint.textContent = 'could not load category slugs from the API - type one that exists.';
+      }
+    }
+
+    // Unsaved-changes guard: the first input event arms it (programmatic
+    // prefill fires none), a landed save disarms it before the redirect.
+    let dirty = false;
+    function warnUnsaved(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+    form.addEventListener('input', () => {
+      if (dirty) return;
+      dirty = true;
+      addEventListener('beforeunload', warnUnsaved);
+    });
+    function clearDirty() {
+      dirty = false;
+      removeEventListener('beforeunload', warnUnsaved);
+    }
+
+    async function main() {
+      const slug = new URLSearchParams(location.search).get('s') ?? '';
+      if (!slug) {
+        swapTo('missing');
+        return;
+      }
+      const detail = `/entry/?s=${encodeURIComponent(slug)}`;
+      byId<HTMLAnchorElement>('cancel').href = detail;
+      byId<HTMLAnchorElement>('denied-back').href = detail;
+      byId<HTMLAnchorElement>('guest-login').href = `/login?next=${encodeURIComponent(`/edit/?s=${slug}`)}`;
+
+      const hadTokens = !!storedPair();
+      let pair: EnsuredPair;
+      try {
+        pair = await ensurePair();
+      } catch {
+        // The session may be fine; the API just did not answer. Keep it and
+        // say so instead of logging out or redirecting.
+        checking.textContent = 'could not reach the API - reload to try again.';
+        checking.className = 'small err';
+        return;
+      }
+      const me = pair ? claims(pair.access_token) : null;
+      if (!pair || !me?.sub) {
+        // Tokens existed but died (refresh rejected) -> must log in again.
+        if (hadTokens) {
+          handleExpiredSession();
+          return;
+        }
+        swapTo('guest');
+        return;
+      }
+
+      let post: ApiPost;
+      try {
+        post = await fetchPost(slug);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          checking.textContent = 'This post does not exist (or was deleted). ';
+          const back = document.createElement('a');
+          back.href = '/';
+          back.textContent = 'back to the list';
+          checking.append(back, '.');
+        } else {
+          checking.textContent = 'could not reach the API - reload to try again.';
+          checking.className = 'small err';
+        }
+        return;
+      }
+      // Client-side gating is a UX filter only; the API enforces 403 on save.
+      if (me.sub !== post.author_id) {
+        swapTo('denied');
+        return;
+      }
+
+      // Prefill byte-exact: untouched fields go back exactly as fetched.
+      byId<HTMLInputElement>('title').value = post.title;
+      // The API orders a post's categories parents first, so the last one is
+      // the most specific slug. Sending a derivative alone relinks its
+      // parent - a save then cannot silently drop the derivative.
+      byId<HTMLInputElement>('category').value = post.categories[post.categories.length - 1]?.slug ?? '';
+      byId<HTMLTextAreaElement>('value').value = post.items?.[0]?.value ?? '';
+      swapTo('edit-form');
+      void loadCategories();
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        save.disabled = true;
+        setStatus('saving…', 'small');
+        try {
+          // Re-gate here: the pair captured at page load may have expired
+          // while the user typed. A throw means unreachable, handled below.
+          const fresh = await ensurePair();
+          if (!fresh?.access_token) {
+            handleExpiredSession();
+            return;
+          }
+          await updatePost(slug, payload(), fresh.access_token);
+          clearDirty();
+          // Post/Redirect/Get: the detail page shows fresh data plus a flash.
+          goInternal(`${detail}&saved=1`);
+          return;
+        } catch (error) {
+          // A dead token must log in again; the redirect clears the pair.
+          if (isTokenExpired(error)) {
+            handleExpiredSession();
+            return;
+          }
+          if (error instanceof ApiError && error.status === 403) {
+            setStatus('only the author can edit this post.', 'small err');
+            return;
+          }
+          if (error instanceof ApiError && error.status === 404) {
+            setStatus('this post no longer exists - ', 'small err');
+            const back = document.createElement('a');
+            back.href = '/';
+            back.textContent = 'back to the list';
+            status.append(back, '.');
+            return;
+          }
+          // ApiError carries the API's text/plain reason; anything else means the request
+          // never landed (offline, or the API's CORS policy blocking this origin).
+          setStatus(
+            error instanceof ApiError ? error.message : 'could not reach the API from this page.',
+            'small err',
+          );
+        } finally {
+          save.disabled = false;
+        }
+      });
+    }
+
+    void main();
+  </script>
+</Base>

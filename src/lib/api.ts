@@ -208,6 +208,18 @@ export interface CreatePostInput {
   value: string;
 }
 
+/** PUT /posts/{slug} body - the create fields minus `slug`, which is
+ *  immutable and lives in the path only. */
+export interface UpdatePostInput {
+  title: string;
+  /** Slug of an existing category - top-level or one of its derivatives. */
+  category: string;
+  /** Optional derivative slug; must be a child of `category`. */
+  derivative?: string;
+  /** The full post body (markdown), byte-exact, max 64 KiB. */
+  value: string;
+}
+
 /** A row shaped for EntryRows.astro: `{ url, title, summary, category, author, display, date, attrs? }`. */
 export interface ApiRow {
   url: string;
@@ -470,6 +482,18 @@ export async function createPost(input: CreatePostInput, token: string, fetchImp
     await apiFetch<unknown>('/posts', { method: 'POST', body: input, token, fetchImpl }),
     '/posts',
   );
+}
+
+/** Owner-only: the API answers 403 for someone else's post. 200 carries the
+ *  fresh Post - the slug cannot change, so the path is the whole identity. */
+export async function updatePost(
+  slug: string,
+  input: UpdatePostInput,
+  token: string,
+  fetchImpl?: FetchLike,
+): Promise<ApiPost> {
+  const path = `/posts/${encodeURIComponent(slug)}`;
+  return toOne(PostSchema, await apiFetch<unknown>(path, { method: 'PUT', body: input, token, fetchImpl }), path);
 }
 
 /** Owner-only: the API answers 403 for someone else's post. 204, nothing back. */

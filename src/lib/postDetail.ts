@@ -138,6 +138,12 @@ export async function mountPostDetail(root: HTMLElement, slug: string): Promise<
   root.replaceChildren(renderPost(post));
   document.title = `${post.title} - ${SITE.name}`;
 
+  // The edit page redirects back here with ?saved=1 - the same fixed-string
+  // flash convention as /login's ?changed=1. The param value is never rendered.
+  if (new URLSearchParams(location.search).get('saved') === '1') {
+    root.prepend(note('post updated - your changes are live.', 'small ok'));
+  }
+
   const hadTokens = !!storedPair();
   let pair: EnsuredPair;
   try {
@@ -153,9 +159,11 @@ export async function mountPostDetail(root: HTMLElement, slug: string): Promise<
     return;
   }
   const line = note('', 'small');
+  const edit = el('a', undefined, 'edit');
+  edit.href = `/edit/?s=${encodeURIComponent(slug)}`;
   const del = el('button', 'linkbutton', 'delete');
   del.type = 'button';
   del.addEventListener('click', () => void deleteFlow(slug, line));
-  line.append(del, ' · posted by you');
+  line.append(edit, ' · ', del, ' · posted by you');
   root.append(line);
 }
