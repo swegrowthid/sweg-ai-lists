@@ -105,6 +105,20 @@ const ToolSchema = z.object({
   min_spend: z.string().optional(),
   /** ADE only: entries from the source "AI Features" cell. */
   ai_features: z.array(z.string()).optional(),
+  /** Total votes the tool has. Always present, minimum 0. */
+  votes: z.number(),
+  /** True when the caller's token already voted this tool; false for
+   *  anonymous or invalid tokens. */
+  voted: z.boolean(),
+});
+
+/** What POST/DELETE /tools/{id}/votes answer: the row's fresh count and the
+ *  caller's vote state after the operation. Apply it verbatim - no optimistic
+ *  counting beside the server's. */
+const VoteResultSchema = z.object({
+  tool_id: z.string(),
+  votes: z.number(),
+  voted: z.boolean(),
 });
 
 const ToolCategorySchema = z.object({
@@ -164,6 +178,7 @@ export type ApiNews = z.infer<typeof NewsSchema>;
 export type ApiTool = z.infer<typeof ToolSchema>;
 export type ApiToolCategory = z.infer<typeof ToolCategorySchema>;
 export type ApiPageMeta = z.infer<typeof PageMetaSchema>;
+export type ApiVoteResult = z.infer<typeof VoteResultSchema>;
 
 /** One page of tools plus the paging metadata for the rest. */
 export interface ApiToolPage {
@@ -316,7 +331,8 @@ export interface ToolQuery {
   /** Case-insensitive substring of name, website label, status, min spend,
    *  and AI features. */
   q?: string;
-  /** Sort key: `name` or `updated`. Empty keeps the source order. */
+  /** Sort key: `name`, `updated` or `votes`. Empty keeps the source order.
+   *  `votes` defaults to `desc` when `order` is omitted. */
   sort?: string;
   /** Sort direction, `asc` or `desc`. Only read when `sort` is set. */
   order?: string;
@@ -334,6 +350,7 @@ export async function fetchTools(
   query: ToolQuery = {},
   fetchImpl?: FetchLike,
   signal?: AbortSignal,
+  token?: string,
 ): Promise<ApiToolPage> {
   const params = new URLSearchParams();
   if (query.group) params.set('group', query.group);
@@ -345,8 +362,24 @@ export async function fetchTools(
   if (query.perPage) params.set('per_page', String(query.perPage));
   const search = params.toString();
   const path = search ? `/tools?${search}` : '/tools';
-  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl, signal }), '/tools');
+  // The Bearer is optional here: with a live token the rows' `voted` flags
+  // come back personalized; the API treats a missing or dead token as
+  // anonymous and still answers 200.
+  const raw = toOne(ToolListSchema, await apiFetch<unknown>(path, { fetchImpl, signal, token }), '/tools');
   return { data: toRows(ToolSchema, raw.data, '/tools'), meta: raw.meta };
+}
+
+/** One vote per user per tool; a repeat POST is an idempotent 200 with the
+ *  same VoteResult body as a fresh 201. */
+export async function voteTool(id: string, token: string, fetchImpl?: FetchLike): Promise<ApiVoteResult> {
+  const path = `/tools/${encodeURIComponent(id)}/votes`;
+  return toOne(VoteResultSchema, await apiFetch<unknown>(path, { method: 'POST', token, fetchImpl }), path);
+}
+
+/** Idempotent: always 200 with the latest VoteResult, vote or not. */
+export async function unvoteTool(id: string, token: string, fetchImpl?: FetchLike): Promise<ApiVoteResult> {
+  const path = `/tools/${encodeURIComponent(id)}/votes`;
+  return toOne(VoteResultSchema, await apiFetch<unknown>(path, { method: 'DELETE', token, fetchImpl }), path);
 }
 
 export async function fetchToolCategories(fetchImpl?: FetchLike): Promise<ApiToolCategory[]> {
