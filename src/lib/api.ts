@@ -4,6 +4,7 @@
 
 import { z } from 'astro/zod';
 import { CATEGORY_NAME } from '../data/site';
+import { markdownToPlainText } from './markdown';
 
 /** Build-time override: `PUBLIC_SWEG_API_BASE=http://127.0.0.1:8080 bun run build`.
  *  Defaults to the live host so the static build works with no env set.
@@ -52,12 +53,10 @@ const CategorySchema = z.object({
 
 const PostItemSchema = z.object({
   id: z.string(),
-  kind: z.enum(['markdown', 'text', 'link', 'file']),
   position: z.number(),
-  body_text: z.string().optional(),
-  url: z.string().optional(),
-  filename: z.string().optional(),
-  mime: z.string().optional(),
+  /** The full post body (markdown), byte-exact. A post carries exactly one
+   *  item at position 0. */
+  value: z.string(),
 });
 
 const PostSchema = z.object({
@@ -204,7 +203,6 @@ export interface ApiToolPage {
 }
 export type TokenPair = z.infer<typeof TokenPairSchema>;
 export type ApiUser = z.infer<typeof UserSchema>;
-export type ItemKind = ApiPostItem['kind'];
 
 // --- request shapes ----------------------------------------------------------
 // Built here, never parsed from a response, so they are plain types.
@@ -220,8 +218,10 @@ export interface CreatePostInput {
   title: string;
   /** Slug of an existing category - top-level or one of its derivatives. */
   category: string;
-  /** Array order is display order. Send only the fields owned by each `kind`. */
-  items: { kind: ItemKind; body_text?: string; url?: string; filename?: string; mime?: string }[];
+  /** Optional derivative slug; must be a child of `category`. */
+  derivative?: string;
+  /** The full post body (markdown), byte-exact, max 64 KiB. */
+  value: string;
 }
 
 /** A row shaped for EntryRows.astro: `{ url, title, summary, category, author, display, date, attrs? }`. */
@@ -537,11 +537,10 @@ export async function createCategory(
 
 const SUMMARY_MAX = 140;
 
-/** Opening of the first markdown/text item, otherwise the title. Runs of
+/** Opening of the post body as plain text, otherwise the title. Runs of
  *  whitespace collapse so a snippet of body text reads as one line. */
 export function postSummary(post: ApiPost): string {
-  const body = post.items?.find((item) => item.kind === 'markdown' || item.kind === 'text')?.body_text;
-  const text = (body ?? '').replace(/\s+/g, ' ').trim();
+  const text = markdownToPlainText(post.items?.[0]?.value ?? '');
   if (!text) return post.title;
   return text.length > SUMMARY_MAX ? text.slice(0, SUMMARY_MAX).trimEnd() : text;
 }

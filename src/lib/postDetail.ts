@@ -5,7 +5,8 @@
 
 import { CATEGORY_NAME, SITE } from '../data/site';
 import { ApiError, deletePost, fetchPost, postSummary } from './api';
-import type { ApiPost, ApiPostItem } from './api';
+import type { ApiPost } from './api';
+import { markdownToSafeHtml } from './markdown';
 import { goInternal } from './nav';
 import { claims, clearPair, ensurePair, handleExpiredSession, isTokenExpired, storedPair } from './session';
 import type { EnsuredPair } from './session';
@@ -21,24 +22,10 @@ function note(text: string, cls = 'muted'): HTMLParagraphElement {
   return el('p', cls, text);
 }
 
-function renderItem(item: ApiPostItem): HTMLElement {
-  if (item.kind === 'link') {
-    const p = el('p', 'item-link');
-    const a = el('a');
-    a.href = item.url ?? '#';
-    a.textContent = item.url ?? '';
-    p.append(a);
-    return p;
-  }
-  if (item.kind === 'file') {
-    const wrap = el('div');
-    const head = el('p', 'item-file');
-    head.append(el('span', 'price', item.filename ?? 'file'), ' ', el('span', 'muted', item.mime ?? 'text/markdown'));
-    wrap.append(head);
-    if (item.body_text) wrap.append(el('pre', 'wrap', item.body_text));
-    return wrap;
-  }
-  return el('pre', 'wrap', item.body_text ?? '');
+function renderBody(value: string): HTMLElement {
+  const body = el('div', 'post-body');
+  body.innerHTML = markdownToSafeHtml(value);
+  return body;
 }
 
 function renderPost(post: ApiPost): DocumentFragment {
@@ -82,10 +69,11 @@ function renderPost(post: ApiPost): DocumentFragment {
   actions.append(share, shareStatus);
   frag.append(actions);
 
-  if (post.items?.length) {
-    for (const item of post.items) frag.append(renderItem(item));
+  const value = post.items?.[0]?.value ?? '';
+  if (value.trim()) {
+    frag.append(renderBody(value));
   } else {
-    frag.append(note('This post has no content items yet.'));
+    frag.append(note('This post has no content yet.'));
   }
   return frag;
 }
