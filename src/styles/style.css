@@ -217,6 +217,10 @@ html[data-theme="dark"] .searchbar button:not(.chip), html[data-theme="dark"] .f
 .detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0 22px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .copy-button { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); font-weight: 600; }
 .copy-button:hover { border-color: var(--accent); color: var(--accent); }
+/* Action buttons that must read as plain links (delete, log out): same color,
+   underline and offset as a[href], so they sit inline next to real links. */
+.linkbutton { padding: 0; border: 0; background: none; color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.linkbutton:hover { color: var(--accent-hover); }
 
 /* Forms and account pages */
 .form { max-width: 660px; }
