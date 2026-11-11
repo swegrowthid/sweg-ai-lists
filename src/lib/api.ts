@@ -88,35 +88,6 @@ const NewsSchema = z.object({
   updated_at: z.string(),
 });
 
-const DailyTermSchema = z.object({
-  id: z.string(),
-  year: z.number(),
-  month: z.number(),
-  month_key: z.string(),
-  day: z.number(),
-  slug: z.string(),
-  title: z.string(),
-  definition: z.string(),
-  example: z.string(),
-  source_file: z.string(),
-  source_url: z.string(),
-});
-
-const DailyTermMonthSchema = z.object({
-  month_key: z.string(),
-  name: z.string(),
-  year: z.number(),
-  month: z.number(),
-  source_file: z.string(),
-  source_url: z.string(),
-  count: z.number(),
-});
-
-const DailyTermListSchema = z.object({
-  data: z.array(z.unknown()),
-  meta: DailyTermMonthSchema,
-});
-
 const ToolSchema = z.object({
   /** Source-table id, PREFIX-NNN: P = providers, CA = coding-agents, ADE = ade. */
   id: z.string(),
@@ -190,8 +161,6 @@ export type ApiCategory = z.infer<typeof CategorySchema>;
 export type ApiPostItem = z.infer<typeof PostItemSchema>;
 export type ApiPost = z.infer<typeof PostSchema>;
 export type ApiNews = z.infer<typeof NewsSchema>;
-export type ApiDailyTerm = z.infer<typeof DailyTermSchema>;
-export type ApiDailyTermMonth = z.infer<typeof DailyTermMonthSchema>;
 export type ApiTool = z.infer<typeof ToolSchema>;
 export type ApiToolCategory = z.infer<typeof ToolCategorySchema>;
 export type ApiPageMeta = z.infer<typeof PageMetaSchema>;
@@ -333,53 +302,9 @@ export async function fetchWanted(fetchImpl?: FetchLike): Promise<ApiPost[]> {
 }
 
 /** Public digest feed, newest `published_at` first. Read-only: the API fills it
- *  by daily sync, so callers only ever GET it. */
+ *  by a sync that runs every day, so callers only ever GET it. */
 export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
   return toRows(NewsSchema, await apiFetch<unknown>('/news', { fetchImpl }), '/news');
-}
-
-export interface ApiDailyTermPage {
-  data: ApiDailyTerm[];
-  meta: ApiDailyTermMonth;
-}
-
-export async function fetchDailyTermMonths(fetchImpl?: FetchLike): Promise<ApiDailyTermMonth[]> {
-  return toRows(
-    DailyTermMonthSchema,
-    await apiFetch<unknown>('/daily-terms/months', { fetchImpl }),
-    '/daily-terms/months',
-  );
-}
-
-export async function fetchDailyTerms(month?: string, fetchImpl?: FetchLike): Promise<ApiDailyTermPage> {
-  const path = month ? `/daily-terms?month=${encodeURIComponent(month)}` : '/daily-terms';
-  const raw = toOne(DailyTermListSchema, await apiFetch<unknown>(path, { fetchImpl }), '/daily-terms');
-  return {
-    data: toRows(DailyTermSchema, raw.data, '/daily-terms').sort(
-      (a, b) => b.year - a.year || b.month - a.month || b.day - a.day,
-    ),
-    meta: raw.meta,
-  };
-}
-
-/** Recent terms can cross a month boundary when the latest month has fewer
- *  than the requested number of entries. */
-export async function fetchRecentDailyTerms(limit: number, fetchImpl?: FetchLike): Promise<ApiDailyTerm[]> {
-  const latest = await fetchDailyTerms(undefined, fetchImpl);
-  const terms = [...latest.data];
-  if (terms.length < limit) {
-    const months = await fetchDailyTermMonths(fetchImpl);
-    const previousMonths = months
-      .map((month) => month.month_key)
-      .filter((month) => month < latest.meta.month_key)
-      .sort()
-      .reverse();
-    for (const month of previousMonths) {
-      if (terms.length >= limit) break;
-      terms.push(...(await fetchDailyTerms(month, fetchImpl)).data);
-    }
-  }
-  return terms.slice(0, limit);
 }
 
 export interface ToolQuery {

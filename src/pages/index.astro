@@ -2,9 +2,8 @@
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
 import SearchHero from '../components/SearchHero.astro';
-import { fetchNews, fetchRecentDailyTerms, newsToRow } from '../lib/api';
-import type { ApiDailyTerm, ApiNews } from '../lib/api';
-import { markdownToPlainText, markdownToSafeHtml } from '../lib/markdown';
+import { fetchNews, newsToRow } from '../lib/api';
+import type { ApiNews } from '../lib/api';
 
 const homeItemLimit = 4;
 
@@ -15,13 +14,6 @@ try {
   apiNews = [];
 }
 const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
-
-let latestTerms: ApiDailyTerm[] = [];
-try {
-  latestTerms = await fetchRecentDailyTerms(homeItemLimit);
-} catch {
-  latestTerms = [];
-}
 ---
 
 <Base>
@@ -38,39 +30,9 @@ try {
     <p class="empty-state" id="news-empty" hidden={newsRows.length > 0}>No digest posts yet.</p>
   </section>
 
-  <section class="home-section" aria-labelledby="daily-term-heading">
-    <div class="section-heading">
-      <h2 id="daily-term-heading">SWE Daily Term</h2>
-      <a href="/daily-terms/">Browse all terms →</a>
-    </div>
-    <div class="daily-terms" id="latest-daily-terms">
-      {latestTerms.map((term) => (
-        <details class="box daily-term">
-          <summary class="daily-term-summary">
-            <span class="eyebrow">{term.day > 0 ? `Day ${term.day}` : 'Daily term'}</span>
-            <span class="daily-term-title">{term.title}</span>
-            <span class="daily-term-preview">{markdownToPlainText(term.definition)}</span>
-          </summary>
-          <div class="daily-term-full">
-            <h3>Definition</h3>
-            <div class="daily-term-copy" set:html={markdownToSafeHtml(term.definition)} />
-            {term.example ? (
-              <>
-                <h3>Example</h3>
-                <div class="daily-term-copy" set:html={markdownToSafeHtml(term.example)} />
-              </>
-            ) : null}
-          </div>
-        </details>
-      ))}
-    </div>
-    <p class="empty-state" id="daily-term-empty" hidden={latestTerms.length > 0}>No daily terms are available yet.</p>
-  </section>
-
   <script>
-    import { fetchNews, fetchRecentDailyTerms } from '../lib/api';
+    import { fetchNews } from '../lib/api';
     import { newsRowsHtml } from '../lib/news';
-    import { markdownToPlainText, markdownToSafeHtml } from '../lib/markdown';
 
     async function refreshNewsSection() {
       let entries;
@@ -87,57 +49,6 @@ try {
       if (empty) empty.hidden = entries.length > 0;
     }
 
-    async function refreshDailyTerm() {
-      let terms;
-      try {
-        terms = await fetchRecentDailyTerms(4);
-      } catch {
-        return; // Keep the build snapshot.
-      }
-      const list = document.getElementById('latest-daily-terms');
-      const empty = document.getElementById('daily-term-empty');
-      if (!list || !empty) return;
-      list.replaceChildren();
-      for (const term of terms) {
-        const card = document.createElement('details');
-        card.className = 'box daily-term';
-        const summary = document.createElement('summary');
-        summary.className = 'daily-term-summary';
-        const day = document.createElement('span');
-        day.className = 'eyebrow';
-        day.textContent = term.day > 0 ? `Day ${term.day}` : 'Daily term';
-        const title = document.createElement('span');
-        title.className = 'daily-term-title';
-        title.textContent = term.title;
-        const preview = document.createElement('span');
-        preview.className = 'daily-term-preview';
-        preview.textContent = markdownToPlainText(term.definition);
-        summary.append(day, title, preview);
-        card.append(summary);
-
-        const full = document.createElement('div');
-        full.className = 'daily-term-full';
-        const definitionLabel = document.createElement('h3');
-        definitionLabel.textContent = 'Definition';
-        const definition = document.createElement('div');
-        definition.className = 'daily-term-copy';
-        definition.innerHTML = markdownToSafeHtml(term.definition);
-        full.append(definitionLabel, definition);
-        if (term.example) {
-          const exampleLabel = document.createElement('h3');
-          exampleLabel.textContent = 'Example';
-          const example = document.createElement('div');
-          example.className = 'daily-term-copy';
-          example.innerHTML = markdownToSafeHtml(term.example);
-          full.append(exampleLabel, example);
-        }
-        card.append(full);
-        list.append(card);
-      }
-      empty.hidden = terms.length > 0;
-    }
-
     void refreshNewsSection();
-    void refreshDailyTerm();
   </script>
 </Base>
