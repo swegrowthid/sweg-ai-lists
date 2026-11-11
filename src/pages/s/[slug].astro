@@ -39,11 +39,34 @@ const rows = apiPosts
     <h1>{name}</h1>
     <p class="lede">Community-shared posts in this category.</p>
   </header>
-  {
-    rows.length > 0 ? (
-      <EntryRows rows={rows} />
-    ) : (
-      <p class="empty-state">No posts yet in this category.</p>
-    )
-  }
+  <div id="post-rows" data-slug={slug}>
+    <EntryRows rows={rows} />
+  </div>
+  <p class="empty-state" id="posts-empty" hidden={rows.length > 0}>No posts yet in this category.</p>
+
+  <script>
+    import { fetchPosts } from '../../lib/api';
+    import { postRowsHtml } from '../../lib/posts';
+
+    // The list is baked at build time; refresh it once so posts created since
+    // the last deploy appear without a rebuild. Failure keeps the snapshot.
+    async function refreshPosts() {
+      const slug = document.getElementById('post-rows')?.getAttribute('data-slug') ?? '';
+      if (!slug) return;
+      let posts;
+      try {
+        posts = await fetchPosts({ category: slug });
+      } catch {
+        return;
+      }
+      const tbody = document.querySelector<HTMLTableSectionElement>('#post-rows .rows tbody');
+      if (!tbody) return;
+      posts.sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
+      tbody.innerHTML = postRowsHtml(posts);
+      const empty = document.getElementById('posts-empty');
+      if (empty) empty.hidden = posts.length > 0;
+    }
+
+    void refreshPosts();
+  </script>
 </Base>
