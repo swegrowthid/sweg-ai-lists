@@ -27,12 +27,12 @@ import Base from '../layouts/Base.astro';
           <input type="email" id="magic-email" name="email" autocomplete="email" required />
         </div>
         <div class="actions">
-          <button type="submit">email me a sign-in link</button>
+          <button type="submit">email me a login link</button>
         </div>
         <p class="small" id="magic-status" hidden></p>
       </form>
       <p class="alt">
-        <button type="button" class="category-toggle" id="swap-magic">email me a sign-in link instead</button>
+        <button type="button" class="category-toggle" id="swap-magic">email me a login link instead</button>
         <button type="button" class="category-toggle" id="swap-password" hidden>log in with a password instead</button>
       </p>
     </div>
@@ -135,7 +135,7 @@ import Base from '../layouts/Base.astro';
     const magicForm = byId<HTMLFormElement>('magic-form');
     const magicStatus = byId<HTMLParagraphElement>('magic-status');
 
-    // One sign-in method is visible at a time; the swap link reveals the other
+    // One login method is visible at a time; the swap link reveals the other
     // one, so the page never shows two competing forms for the user to pick.
     const swapToMagic = byId<HTMLButtonElement>('swap-magic');
     const swapToPassword = byId<HTMLButtonElement>('swap-password');

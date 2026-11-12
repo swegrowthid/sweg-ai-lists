@@ -47,21 +47,17 @@ const GROUPS = [
 
 type GroupValue = (typeof GROUPS)[number]['value'];
 
-/** One select drives both sort key and direction. `key|dir` matches the URL
- *  params `sort` + `order`, so shared links keep their meaning. */
+/** Sort buttons map directly to URL params `sort` + `order`, so shared links
+ *  keep their meaning. */
 const SORT_OPTIONS = [
-  { value: '', label: 'source order' },
-  { value: 'name|asc', label: 'name a-z' },
-  { value: 'name|desc', label: 'name z-a' },
+  { value: 'name|asc', label: 'name A–Z' },
+  { value: 'votes|desc', label: 'most thumbs' },
   { value: 'updated|desc', label: 'newest first' },
-  { value: 'updated|asc', label: 'oldest first' },
-  { value: 'votes|desc', label: 'most votes' },
-  { value: 'votes|asc', label: 'fewest votes' },
 ] as const;
 
-type SortValue = (typeof SORT_OPTIONS)[number]['value'];
+type SortValue = '' | (typeof SORT_OPTIONS)[number]['value'];
 
-/** The query the URL carries. `sort` is the combined `key|dir` the select uses. */
+/** The query the URL carries. `sort` is the combined `key|dir` button value. */
 interface Params {
   q: string;
   group: GroupValue;
@@ -143,9 +139,17 @@ function pageItems(current: number, total: number): (number | '...')[] {
   return items;
 }
 
+function ThumbUpIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59A1.99 1.99 0 0 0 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
+    </svg>
+  );
+}
+
 /** One table row in the exact shape EntryRows renders, so the tools list looks
- *  like every other list on the site. The votes column sits last: anonymous
- *  visitors get the plain count, a logged-in session gets the toggle. */
+ *  like every other list on the site. Anonymous visitors see the count and
+ *  icon; a logged-in session gets the vote toggle. */
 function Row({
   row,
   tool,
@@ -186,13 +190,20 @@ function Row({
             type="button"
             className="chip vote-chip"
             aria-pressed={tool.voted}
+            aria-label={`${tool.voted ? 'Remove thumb from' : 'Thumb up'} ${tool.name}; ${tool.votes} ${tool.votes === 1 ? 'thumb' : 'thumbs'}`}
+            title={tool.voted ? 'Undo your thumb up' : 'Thumb up this tool'}
             disabled={pending}
             onClick={() => onToggle(tool)}
           >
-            {tool.voted ? 'voted' : 'vote'} · {tool.votes}
+            <ThumbUpIcon />
+            <span>{tool.votes}</span>
           </button>
         ) : (
-          <span>{tool.votes === 1 ? '1 vote' : `${tool.votes} votes`}</span>
+          <span className="chip vote-chip vote-count">
+            <ThumbUpIcon />
+            <span aria-hidden="true">{tool.votes}</span>
+            <span className="sr-only">{tool.votes === 1 ? '1 thumb' : `${tool.votes} thumbs`}</span>
+          </span>
         )}
       </td>
     </tr>
@@ -380,7 +391,7 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
         return;
       }
       setVoteError(
-        error instanceof ApiError ? error.message : 'could not reach the API - the vote is not counted.',
+        error instanceof ApiError ? error.message : 'could not reach the API - your thumb was not saved.',
       );
     } finally {
       setPendingVote(null);
@@ -396,10 +407,10 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
 
   return (
     <>
-      <form className="searchbar" role="search" onSubmit={(event) => event.preventDefault()}>
-        <div className="field">
+      <form className="searchbar tools-searchbar" role="search" onSubmit={(event) => event.preventDefault()}>
+        <div className="field search-field">
           <label className="inline" htmlFor="tool-q">
-            search
+            Search
           </label>
           <input
             id="tool-q"
@@ -409,45 +420,53 @@ export default function ToolsList({ tools, meta, buildFailed }: Props) {
             onChange={(event) => setInput(event.currentTarget.value)}
           />
         </div>
-        <div className="field">
-          <label className="inline" htmlFor="tool-sort">
-            order by
-          </label>
-          <select
-            id="tool-sort"
-            value={query.sort}
-            onChange={(event) => pickSort(SORT_OPTIONS.find((o) => o.value === event.currentTarget.value)?.value ?? '')}
-          >
+        <div className="field sort-field">
+          <span className="control-label">Sort by</span>
+          <div className="chips" role="group" aria-label="Order tools">
             {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
+              <button
+                key={o.value}
+                type="button"
+                className="chip"
+                aria-pressed={query.sort === o.value}
+                onClick={() => pickSort(o.value)}
+              >
                 {o.label}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         </div>
-        <div className="chips" role="group" aria-label="group">
-          {GROUPS.map((g) => (
-            <button
-              key={g.value}
-              type="button"
-              className="chip"
-              aria-pressed={query.group === g.value}
-              onClick={() => pickGroup(g.value)}
-            >
-              {g.label}
-              {counts ? ` ${g.value === '' ? (counts[''] ?? 0) : (counts[g.value] ?? 0)}` : ''}
-            </button>
-          ))}
+        <div className="field type-field">
+          <span className="control-label">Type</span>
+          <div className="chips" role="group" aria-label="Filter tools by type">
+            {GROUPS.slice(1).map((g) => (
+              <button
+                key={g.value}
+                type="button"
+                className="chip"
+                aria-pressed={query.group === g.value}
+                onClick={() => pickGroup(query.group === g.value ? '' : g.value)}
+              >
+                {g.label}
+                {counts ? ` ${g.value === '' ? (counts[''] ?? 0) : (counts[g.value] ?? 0)}` : ''}
+              </button>
+            ))}
+          </div>
         </div>
       </form>
 
       {hint ? <p className="small muted">{hint}</p> : null}
 
-      <p className="small" id="count">
-        {`${rows.length} of ${viewMeta.total} ${viewMeta.total === 1 ? 'tool' : 'tools'}${
-          status === 'ready' && note ? ` matching ${note}` : ''
-        }`}
-      </p>
+      <div className="tools-list-meta">
+        <p className="small" id="count">
+          {`${rows.length} of ${viewMeta.total} ${viewMeta.total === 1 ? 'tool' : 'tools'}${
+            status === 'ready' && note ? ` matching ${note}` : ''
+          }`}
+        </p>
+        <p className="small muted tools-login-guidance" data-auth="out" hidden>
+          To thumb up, <a href="/login?next=%2Ftools%2F">log in</a> first.
+        </p>
+      </div>
 
       {voteError ? (
         <p className="small err" role="alert">

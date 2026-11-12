@@ -2,22 +2,45 @@
 import Base from '../layouts/Base.astro';
 import EntryRows from '../components/EntryRows.astro';
 import SearchHero from '../components/SearchHero.astro';
-import { fetchNews, newsToRow } from '../lib/api';
-import type { ApiNews } from '../lib/api';
+import { fetchNews, fetchTools, newsToRow } from '../lib/api';
+import type { ApiNews, ApiTool } from '../lib/api';
+import { popularToolsRowsHtml } from '../lib/tools';
 
 const homeItemLimit = 4;
 
 let apiNews: ApiNews[] = [];
+let popularTools: ApiTool[] = [];
 try {
   apiNews = await fetchNews();
 } catch {
   apiNews = [];
+}
+try {
+  popularTools = (await fetchTools({ sort: 'votes', order: 'desc', page: 1, perPage: homeItemLimit })).data;
+} catch {
+  popularTools = [];
 }
 const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
 ---
 
 <Base>
   <SearchHero />
+
+  <section class="home-section" aria-labelledby="popular-tools-heading">
+    <div class="section-heading popular-tools-heading">
+      <h2 id="popular-tools-heading">Top AI tools by thumbs</h2>
+      <p class="small muted" data-auth="out" hidden>
+        To thumb up, log in &amp; go to <a href="/tools/?sort=votes&amp;order=desc">All AI Tools</a>
+      </p>
+      <p class="small muted" data-auth="in" hidden>
+        To thumb up, go to <a href="/tools/?sort=votes&amp;order=desc">All AI Tools</a>
+      </p>
+    </div>
+    <table class="rows popular-tools" id="popular-tools-rows">
+      <tbody set:html={popularToolsRowsHtml(popularTools)}></tbody>
+    </table>
+    <p class="empty-state" id="popular-tools-empty" hidden={popularTools.length > 0}>No AI tools yet.</p>
+  </section>
 
   <section class="home-section" aria-labelledby="news-heading">
     <div class="section-heading">
@@ -31,8 +54,23 @@ const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
   </section>
 
   <script>
-    import { fetchNews } from '../lib/api';
+    import { fetchNews, fetchTools } from '../lib/api';
     import { newsRowsHtml } from '../lib/news';
+    import { popularToolsRowsHtml } from '../lib/tools';
+
+    async function refreshPopularToolsSection() {
+      let tools;
+      try {
+        tools = (await fetchTools({ sort: 'votes', order: 'desc', page: 1, perPage: 4 })).data;
+      } catch {
+        return; // Keep the build snapshot.
+      }
+      const tbody = document.querySelector<HTMLTableSectionElement>('#popular-tools-rows tbody');
+      if (!tbody) return;
+      tbody.innerHTML = popularToolsRowsHtml(tools);
+      const empty = document.getElementById('popular-tools-empty');
+      if (empty) empty.hidden = tools.length > 0;
+    }
 
     async function refreshNewsSection() {
       let entries;
@@ -49,6 +87,7 @@ const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
       if (empty) empty.hidden = entries.length > 0;
     }
 
+    void refreshPopularToolsSection();
     void refreshNewsSection();
   </script>
 </Base>
