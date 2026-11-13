@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
 ---
 <Base title="Log in">
   <div class="auth">
@@ -7,6 +8,7 @@ import Base from '../layouts/Base.astro';
     <h1>Log in</h1>
     <p>The token stays in this browser and is what <a href="/submit">submit</a> posts with.</p>
     <div class="box">
+      <SwegrowthSignIn />
       <form class="form" id="login-form">
         <div class="row">
           <label for="identifier">username or email</label>

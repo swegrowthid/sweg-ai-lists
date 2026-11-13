@@ -432,6 +432,15 @@ export async function verifyMagicLink(token: string, fetchImpl?: FetchLike): Pro
   );
 }
 
+/** Trades a swegrowth.id (Supabase) access token for this site's pair. */
+export async function exchangeSupabase(accessToken: string, fetchImpl?: FetchLike): Promise<TokenPair> {
+  return toOne(
+    TokenPairSchema,
+    await apiFetch<unknown>('/auth/supabase', { method: 'POST', body: { access_token: accessToken }, fetchImpl }),
+    '/auth/supabase',
+  );
+}
+
 export async function register(
   username: string,
   email: string,
