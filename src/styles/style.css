@@ -254,6 +254,9 @@ html[data-theme="dark"] .searchbar button:not(.chip), html[data-theme="dark"] .f
 .auth .form { max-width: none; }
 .auth .form input[type="text"], .auth .form input[type="email"], .auth .form input[type="password"] { width: 100%; }
 .auth .form .actions button { width: 100%; }
+.auth .sso .button-primary { width: 100%; }
+.auth .sso p { margin: 8px 0 0; }
+.auth .sso-or { padding-top: 12px; border-top: 1px solid var(--line); margin-top: 16px !important; text-align: center; }
 .auth .alt { margin: 12px 0 0; color: var(--muted); text-align: center; font-size: .88rem; }
 .box, .notice { padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .callout { padding: 14px; border-radius: 9px; background: var(--surface-soft); }

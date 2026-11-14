@@ -1,0 +1,45 @@
+---
+/** "Continue with swegrowth.id" for /login and /register. Renders nothing
+ *  when the build has no swegrowth.id project configured. */
+import { swegrowthEnabled } from '../lib/swegrowth';
+---
+{swegrowthEnabled && (
+  <div class="sso">
+    <button type="button" class="button-primary" id="swegrowth-start">continue with swegrowth.id</button>
+    <p class="small muted">the same Google account you use on swegrowth.id. first time here? an account is made for you.</p>
+    <p class="small err" id="swegrowth-status" hidden></p>
+    <p class="sso-or small muted">or</p>
+  </div>
+)}
+
+<script>
+  import { startSwegrowthSignIn } from '../lib/swegrowth';
+
+  const start = document.getElementById('swegrowth-start') as HTMLButtonElement | null;
+  const status = document.getElementById('swegrowth-status') as HTMLParagraphElement | null;
+
+  // Same rule as the login form: only a same-origin path survives as `next`.
+  function nextPath(): string {
+    const raw = new URLSearchParams(location.search).get('next');
+    if (!raw) return '/';
+    try {
+      const url = new URL(raw, location.origin);
+      return url.origin === location.origin ? `${url.pathname}${url.search}` : '/';
+    } catch {
+      return '/';
+    }
+  }
+
+  start?.addEventListener('click', async () => {
+    start.disabled = true;
+    try {
+      await startSwegrowthSignIn(nextPath());
+    } catch {
+      start.disabled = false;
+      if (status) {
+        status.textContent = 'could not start the sign-in from this browser.';
+        status.hidden = false;
+      }
+    }
+  });
+</script>

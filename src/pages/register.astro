@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
 ---
 <Base title="Create an account">
   <div class="auth">
@@ -7,6 +8,7 @@ import Base from '../layouts/Base.astro';
     <h1>Create an account</h1>
     <p>Create a free account to post under your name.</p>
     <div class="box">
+      <SwegrowthSignIn />
       <form class="form" id="register-form">
         <div class="row">
           <label for="username">username</label>

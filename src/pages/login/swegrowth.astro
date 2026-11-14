@@ -1,0 +1,41 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Log in">
+  <div class="auth">
+    <h1>Log in</h1>
+    <div class="box">
+      <p class="small" id="status">signing in with swegrowth.id…</p>
+    </div>
+    <p class="alt"><a href="/login">back to log in</a></p>
+  </div>
+
+  <script>
+    import { ApiError } from '../../lib/api';
+    import { goInternal } from '../../lib/nav';
+    import { savePair } from '../../lib/session';
+    import { SwegrowthError, finishSwegrowthSignIn } from '../../lib/swegrowth';
+
+    const status = document.getElementById('status') as HTMLParagraphElement;
+    const params = new URLSearchParams(location.search);
+    // The code is single-use: drop it from the address bar and history.
+    history.replaceState(null, '', location.pathname);
+
+    function fail(text: string) {
+      status.className = 'small err';
+      status.textContent = text;
+    }
+
+    finishSwegrowthSignIn(params)
+      .then(({ pair, next }) => {
+        savePair(pair);
+        goInternal(next);
+      })
+      .catch((error) => {
+        if (error instanceof SwegrowthError) fail(error.message);
+        // The API's own reason: unconfirmed email, email linked elsewhere, or sign-in off.
+        else if (error instanceof ApiError && error.status > 0) fail(error.message);
+        else fail('could not reach the API from this page.');
+      });
+  </script>
+</Base>
