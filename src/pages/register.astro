@@ -30,19 +30,24 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
         <p class="small" id="status" hidden></p>
       </form>
     </div>
-    <p class="alt">Already have an account? <a href="/login">log in</a></p>
+    <p class="alt">Already have an account? <a href="/login" id="login-link">log in</a></p>
   </div>
 
   <script>
     import { ApiError, login, register } from '../lib/api';
-    import { goInternal } from '../lib/nav';
-
-    const TOKEN_KEY = 'sweg-ai-tokens';
+    import { goInternal, safeNext } from '../lib/nav';
+    import { savePair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
       return document.getElementById(id) as T;
     }
+
+    const params = new URLSearchParams(location.search);
+    const next = safeNext(params.get('next'));
+    const rawNext = params.get('next');
+
+    if (rawNext) byId<HTMLAnchorElement>('login-link').href = '/login?next=' + encodeURIComponent(rawNext);
 
     const form = byId<HTMLFormElement>('register-form');
     const status = byId<HTMLParagraphElement>('status');
@@ -56,6 +61,8 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       setStatus('registering…', 'small');
+      const button = form.querySelector('button') as HTMLButtonElement;
+      button.disabled = true;
       try {
         // POST /users/register returns the public User only - no tokens.
         // Log in right away with the same credentials so the browser holds
@@ -65,9 +72,10 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
         const password = byId<HTMLInputElement>('password').value;
         const user = await register(username, email, password);
         const pair = await login(user.username, password);
-        localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        goInternal('/');
+        savePair(pair);
+        goInternal(next);
       } catch (error) {
+        button.disabled = false;
         setStatus(
           error instanceof ApiError ? error.message : 'could not reach the API from this page.',
           'small err',
