@@ -435,9 +435,44 @@ export async function login(identifier: string, password: string, fetchImpl?: Fe
   );
 }
 
+const MAGIC_NEXT_KEY = 'swe-ai-magic-next';
+
+/** Stash the post-login destination for the magic-link flow. Last write
+ *  wins; a storage failure is non-fatal — verification then falls back to '/'.
+ *  The stored value is a raw NextCandidate, re-validated by the guard chain
+ *  at navigation time. */
+export function writeMagicNext(next: string): void {
+  try {
+    localStorage.setItem(MAGIC_NEXT_KEY, next);
+  } catch {
+    // storage unavailable — the flow degrades to '/' by design
+  }
+}
+
+/** Read the stashed destination without consuming it (for back-links). */
+export function peekMagicNext(): string | null {
+  try {
+    return localStorage.getItem(MAGIC_NEXT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Read + delete the stash exactly once. Absent or unreadable → '/'. */
+export function consumeMagicNext(): string {
+  try {
+    const value = localStorage.getItem(MAGIC_NEXT_KEY);
+    localStorage.removeItem(MAGIC_NEXT_KEY);
+    return value ?? '/';
+  } catch {
+    return '/';
+  }
+}
+
 /** Requests a one-time login link. The reply is the same generic message for
  *  every syntactically valid email, so the page cannot reveal registration. */
-export async function requestMagicLink(email: string, fetchImpl?: FetchLike): Promise<string> {
+export async function requestMagicLink(email: string, next: string = '/', fetchImpl?: FetchLike): Promise<string> {
+  writeMagicNext(next);
   const response = toOne(
     MagicLinkResponseSchema,
     await apiFetch<unknown>('/auth/magic-link', { method: 'POST', body: { email }, fetchImpl }),

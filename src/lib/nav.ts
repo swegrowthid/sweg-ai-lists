@@ -14,3 +14,22 @@ export function goInternal(path: string): void {
   if (!INTERNAL_PATH.test(path)) return;
   location.assign(path);
 }
+
+/** A raw, untrusted `next` value as carried by URL params, storage records,
+ *  and links. Data only — it becomes navigable solely through goInternal. */
+export type NextCandidate = string;
+
+/** Reduce an untrusted `next` value to a same-origin path candidate.
+ *  Parses against location.origin: same-origin → pathname+search, anything
+ *  else (foreign origin, scheme, protocol-relative, malformed) → '/'.
+ *  The result is still only a candidate — goInternal applies INTERNAL_PATH
+ *  at navigation time. Client-side only; never call during SSR. */
+export function safeNext(raw: string | null | undefined): NextCandidate {
+  if (!raw) return '/';
+  try {
+    const url = new URL(raw, location.origin);
+    return url.origin === location.origin ? `${url.pathname}${url.search}` : '/';
+  } catch {
+    return '/';
+  }
+}

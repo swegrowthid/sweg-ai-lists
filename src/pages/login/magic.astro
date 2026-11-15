@@ -18,8 +18,8 @@ import Base from '../../layouts/Base.astro';
   </div>
 
   <script>
-    import { ApiError, verifyMagicLink } from '../../lib/api';
-    import { goInternal } from '../../lib/nav';
+    import { ApiError, consumeMagicNext, peekMagicNext, verifyMagicLink } from '../../lib/api';
+    import { goInternal, safeNext } from '../../lib/nav';
     import { savePair } from '../../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
@@ -31,6 +31,7 @@ import Base from '../../layouts/Base.astro';
     const status = byId<HTMLParagraphElement>('status');
     const button = form.querySelector('button') as HTMLButtonElement;
     const token = new URLSearchParams(location.search).get('token') ?? '';
+    const stashedNext = peekMagicNext();
 
     // GET only renders. The token is spent by the POST this click sends, so an
     // email scanner that prefetches the link cannot burn it.
@@ -40,7 +41,7 @@ import Base from '../../layouts/Base.astro';
       status.hidden = false;
       status.append(' ');
       const link = document.createElement('a');
-      link.href = '/login';
+      link.href = stashedNext && stashedNext !== '/' ? '/login?next=' + encodeURIComponent(stashedNext) : '/login';
       link.textContent = 'log in another way';
       status.append(link);
     }
@@ -60,7 +61,7 @@ import Base from '../../layouts/Base.astro';
       try {
         const pair = await verifyMagicLink(token);
         savePair(pair);
-        goInternal('/');
+        goInternal(safeNext(consumeMagicNext()));
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           fail('this link is invalid or expired.');

@@ -7,35 +7,60 @@ import Base from '../../layouts/Base.astro';
     <div class="box">
       <p class="small" id="status">signing in with swegrowth.id…</p>
     </div>
-    <p class="alt"><a href="/login">back to log in</a></p>
+    <p class="alt"><a href="/login" id="back-link">back to log in</a></p>
   </div>
 
   <script>
-    import { ApiError } from '../../lib/api';
-    import { goInternal } from '../../lib/nav';
-    import { savePair } from '../../lib/session';
-    import { SwegrowthError, finishSwegrowthSignIn } from '../../lib/swegrowth';
+    import {
+      classifyLanding,
+      finishSwegrowthSignIn,
+      parseSearch,
+      peekPending,
+      stripAuthParams,
+      SwegrowthError,
+    } from '../../lib/swegrowth';
+    import type { ProviderErrorParams } from '../../lib/swegrowth';
+    import { goInternal, safeNext } from '../../lib/nav';
 
-    const status = document.getElementById('status') as HTMLParagraphElement;
-    const params = new URLSearchParams(location.search);
-    // The code is single-use: drop it from the address bar and history.
-    history.replaceState(null, '', location.pathname);
-
-    function fail(text: string) {
-      status.className = 'small err';
-      status.textContent = text;
+    function byId<T extends HTMLElement>(id: string): T {
+      return document.getElementById(id) as T;
     }
 
-    finishSwegrowthSignIn(params)
-      .then(({ pair, next }) => {
-        savePair(pair);
-        goInternal(next);
-      })
-      .catch((error) => {
-        if (error instanceof SwegrowthError) fail(error.message);
-        // The API's own reason: unconfirmed email, email linked elsewhere, or sign-in off.
-        else if (error instanceof ApiError && error.status > 0) fail(error.message);
-        else fail('could not reach the API from this page.');
-      });
+    const status = byId<HTMLParagraphElement>('status');
+    const backLink = byId<HTMLAnchorElement>('back-link');
+
+    function renderError(kind: 'provider' | 'exchange' | 'incomplete', message: string, next?: string): void {
+      status.className = 'small err';
+      status.textContent = message;
+      backLink.href = next ? '/login?next=' + encodeURIComponent(next) : '/login';
+    }
+
+    function providerMessage(p: ProviderErrorParams): string {
+      const candidates = [p.error_description, p.error, p.error_code];
+      for (const c of candidates) {
+        if (c && c.trim()) return c.trim();
+      }
+      return 'swegrowth.id sign-in failed.';
+    }
+
+    const params = parseSearch(location.search);
+    stripAuthParams();
+    const landing = classifyLanding(params);
+
+    if (landing._tag === 'failed') {
+      const next = peekPending()?.next;
+      renderError('provider', providerMessage(landing.params), next);
+    } else if (landing._tag === 'missing') {
+      renderError('incomplete', 'this sign-in link is incomplete or was already used.', undefined);
+    } else {
+      finishSwegrowthSignIn(landing.code)
+        .then(({ next }) => {
+          goInternal(safeNext(next));
+        })
+        .catch((error) => {
+          if (error instanceof SwegrowthError) renderError(error.kind, error.message, error.next);
+          else renderError('exchange', 'could not finish the swegrowth.id sign-in.', undefined);
+        });
+    }
   </script>
 </Base>

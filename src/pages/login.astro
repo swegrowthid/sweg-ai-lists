@@ -38,7 +38,7 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
         <button type="button" class="category-toggle" id="swap-password" hidden>log in with a password instead</button>
       </p>
     </div>
-    <p class="alt">Don't have an account? <a href="/register">sign up</a></p>
+    <p class="alt">Don't have an account? <a href="/register" id="signup-link">sign up</a></p>
     <p class="alt muted" id="state"></p>
     <p class="small" id="changed" hidden></p>
     <p class="small" id="expired" hidden></p>
@@ -46,11 +46,8 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
 
   <script>
     import { ApiError, login, requestMagicLink } from '../lib/api';
-    import type { TokenPair } from '../lib/api';
-    import { goInternal } from '../lib/nav';
-    import { logoutSession } from '../lib/session';
-
-    const TOKEN_KEY = 'sweg-ai-tokens';
+    import { goInternal, safeNext } from '../lib/nav';
+    import { logoutSession, savePair, storedPair } from '../lib/session';
 
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
@@ -61,31 +58,14 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
     const status = byId<HTMLParagraphElement>('status');
     const state = byId<HTMLParagraphElement>('state');
 
-    function tokens(): TokenPair | null {
-      try {
-        return JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null');
-      } catch {
-        return null;
-      }
-    }
-
     const params = new URLSearchParams(location.search);
+    const next = safeNext(params.get('next'));
+    const rawNext = params.get('next');
 
-    // Only same-origin return paths: a crafted ?next= must not send the
-    // freshly logged-in user off-site.
-    function nextPath(): string {
-      const raw = params.get('next');
-      if (!raw) return '/';
-      try {
-        const url = new URL(raw, location.origin);
-        return url.origin === location.origin ? `${url.pathname}${url.search}` : '/';
-      } catch {
-        return '/';
-      }
-    }
+    if (rawNext) byId<HTMLAnchorElement>('signup-link').href = '/register?next=' + encodeURIComponent(rawNext);
 
     function renderState() {
-      const pair = tokens();
+      const pair = storedPair();
       state.textContent = pair?.access_token ? 'token stored in this browser. ' : 'not logged in.';
       if (!pair?.access_token) return;
       const out = document.createElement('button');
@@ -109,15 +89,18 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
       status.className = 'small';
       status.textContent = 'logging in…';
       status.hidden = false;
+      const button = form.querySelector('button') as HTMLButtonElement;
+      button.disabled = true;
       try {
         // TokenPair { access_token, token_type, expires_in, refresh_token, refresh_expires_in }
         const pair = await login(
           byId<HTMLInputElement>('identifier').value,
           byId<HTMLInputElement>('password').value,
         );
-        localStorage.setItem(TOKEN_KEY, JSON.stringify(pair));
-        goInternal(nextPath());
+        savePair(pair);
+        goInternal(next);
       } catch (error) {
+        button.disabled = false;
         status.className = 'small err';
         // ApiError carries the API's text/plain reason; anything else means the request
         // never landed (offline, or the API's CORS policy blocking this origin).
@@ -168,6 +151,7 @@ import SwegrowthSignIn from '../components/SwegrowthSignIn.astro';
         // unregistered email, so this line never reveals which one it was.
         magicStatus.textContent = await requestMagicLink(
           byId<HTMLInputElement>('magic-email').value.trim(),
+          next,
         );
       } catch (error) {
         magicStatus.className = 'small err';
