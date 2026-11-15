@@ -9,6 +9,14 @@ export const SITE = {
     'A community collection of AI skills: practical workflows and notes shared openly.',
 };
 
+/** Canonical public origin — build-time override PUBLIC_CANONICAL_ORIGIN,
+ *  default the production host. Trailing slashes stripped so origin + path
+ *  concatenation stays exact. Read by the sign-in origin gate and the
+ *  foreign-origin resume redirect. */
+export const CANONICAL_ORIGIN = (
+  (import.meta.env.PUBLIC_CANONICAL_ORIGIN as string | undefined) ?? 'https://ai.swegrowth.id'
+).replace(/\/+$/, '');
+
 /** Category slugs double as the `/s/<slug>` route segment. The name is what renders. */
 export const CATEGORIES = [
   { slug: 'coding', name: 'coding & dev tools' },
