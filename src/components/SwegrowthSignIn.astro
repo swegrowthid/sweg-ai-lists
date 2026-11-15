@@ -13,33 +13,41 @@ import { swegrowthEnabled } from '../lib/swegrowth';
 )}
 
 <script>
-  import { startSwegrowthSignIn } from '../lib/swegrowth';
+  import { SwegrowthError, startSwegrowthSignIn, stripResumeMarker } from '../lib/swegrowth';
+  import { safeNext } from '../lib/nav';
 
-  const start = document.getElementById('swegrowth-start') as HTMLButtonElement | null;
+  const startBtn = document.getElementById('swegrowth-start') as HTMLButtonElement | null;
   const status = document.getElementById('swegrowth-status') as HTMLParagraphElement | null;
 
-  // Same rule as the login form: only a same-origin path survives as `next`.
-  function nextPath(): string {
-    const raw = new URLSearchParams(location.search).get('next');
-    if (!raw) return '/';
-    try {
-      const url = new URL(raw, location.origin);
-      return url.origin === location.origin ? `${url.pathname}${url.search}` : '/';
-    } catch {
-      return '/';
-    }
-  }
+  const params = new URLSearchParams(location.search);
+  const next = safeNext(params.get('next'));
+  let started = false;
 
-  start?.addEventListener('click', async () => {
-    start.disabled = true;
+  async function start() {
+    if (started || !startBtn) return;
+    started = true;
+    startBtn.disabled = true;
     try {
-      await startSwegrowthSignIn(nextPath());
-    } catch {
-      start.disabled = false;
+      await startSwegrowthSignIn(next);
+    } catch (error) {
+      started = false;
+      startBtn.disabled = false;
       if (status) {
-        status.textContent = 'could not start the sign-in from this browser.';
+        status.textContent =
+          error instanceof SwegrowthError
+            ? error.message
+            : 'could not start the sign-in from this browser.';
         status.hidden = false;
       }
     }
+  }
+
+  startBtn?.addEventListener('click', () => {
+    void start();
   });
+
+  if (params.get('sso') === '1') {
+    stripResumeMarker();
+    void start();
+  }
 </script>
