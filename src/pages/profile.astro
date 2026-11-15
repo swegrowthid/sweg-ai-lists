@@ -27,6 +27,12 @@ import Base from '../layouts/Base.astro';
       <tr><th>member since</th><td id="f-since">loading…</td></tr>
     </table>
     <p class="small err" id="details-note" hidden></p>
+    <div id="links-box">
+      <p class="small muted">linked accounts</p>
+      <ul id="providers-list"></ul>
+      <p class="small" id="providers-note" hidden></p>
+      <p class="small" id="unlink-status" hidden></p>
+    </div>
     <p class="small">
       <button type="button" class="linkbutton" id="logout">log out</button>
       · <a href="/change-password">change password</a>
@@ -35,7 +41,7 @@ import Base from '../layouts/Base.astro';
   </div>
 
   <script>
-    import { ApiError, fetchUsers } from '../lib/api';
+    import { ApiError, fetchCurrentProfile, unlinkIdentity } from '../lib/api';
     import { goInternal } from '../lib/nav';
     import { claims, ensurePair, handleExpiredSession, isTokenExpired, logoutSession, storedPair } from '../lib/session';
     import type { EnsuredPair } from '../lib/session';
@@ -43,6 +49,40 @@ import Base from '../layouts/Base.astro';
     // Element lookups are typed here; the markup above owns these ids.
     function byId<T extends HTMLElement>(id: string): T {
       return document.getElementById(id) as T;
+    }
+
+    function setUnlinkStatus(text: string, cls: string) {
+      const el = byId<HTMLParagraphElement>('unlink-status');
+      el.className = cls;
+      el.textContent = text;
+      el.hidden = false;
+    }
+
+    function renderProviders(providers: string[], onUnlink: (provider: string, btn: HTMLButtonElement) => void) {
+      const list = byId<HTMLUListElement>('providers-list');
+      const note = byId<HTMLParagraphElement>('providers-note');
+      list.innerHTML = '';
+      if (providers.length === 0) {
+        note.textContent = 'local-only account: no linked login. Password login is enabled.';
+        note.className = 'small muted';
+        note.hidden = false;
+        return;
+      }
+      note.textContent = 'One link must stay: the last sign-in method cannot be removed.';
+      note.className = 'small muted';
+      note.hidden = false;
+      for (const provider of providers) {
+        const item = document.createElement('li');
+        item.textContent = `${provider} `;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'linkbutton';
+        btn.dataset.provider = provider;
+        btn.textContent = 'unlink';
+        btn.addEventListener('click', () => onUnlink(provider, btn));
+        item.appendChild(btn);
+        list.appendChild(item);
+      }
     }
 
     async function main() {
@@ -83,15 +123,49 @@ import Base from '../layouts/Base.astro';
         goInternal('/');
       });
 
+      async function onUnlink(provider: string, btn: HTMLButtonElement) {
+        btn.disabled = true;
+        setUnlinkStatus(`removing ${provider}…`, 'small');
+        try {
+          const fresh = await ensurePair();
+          if (!fresh?.access_token) {
+            handleExpiredSession();
+            return;
+          }
+          await unlinkIdentity(provider, fresh.access_token);
+          setUnlinkStatus(`${provider} removed.`, 'small');
+          const freshProfile = await fetchCurrentProfile(fresh.access_token);
+          renderProviders(freshProfile.providers, onUnlink);
+        } catch (error) {
+          btn.disabled = false;
+          if (isTokenExpired(error)) {
+            handleExpiredSession();
+            return;
+          }
+          if (error instanceof ApiError && error.status === 404) {
+            setUnlinkStatus('identity not linked.', 'small err');
+            return;
+          }
+          if (error instanceof ApiError && error.status === 409) {
+            setUnlinkStatus('cannot unlink the last sign-in method.', 'small err');
+            return;
+          }
+          setUnlinkStatus(
+            error instanceof ApiError ? error.message : 'could not reach the API from this page.',
+            'small err',
+          );
+        }
+      }
+
       try {
-        // No GET /users/{id} on the API - find self by the token's `sub`.
-        const me = (await fetchUsers(pair.access_token)).find((u) => u.id === c.sub);
-        if (!me) throw new ApiError(0, 'account not found in the user list');
+        // Single source: GET /users/me carries id, email, dates, providers.
+        const me = await fetchCurrentProfile(pair.access_token);
         byId('f-email').textContent = me.email;
         const since = new Date(me.created_at);
         byId('f-since').textContent = Number.isNaN(+since)
           ? me.created_at
           : since.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        renderProviders(me.providers, onUnlink);
       } catch (error) {
         // A dead token must log in again; the redirect clears the pair.
         if (isTokenExpired(error)) {
