@@ -188,6 +188,12 @@ export interface ApiToolPage {
 export type TokenPair = z.infer<typeof TokenPairSchema>;
 export type ApiUser = z.infer<typeof UserSchema>;
 
+const UserProfileSchema = UserSchema.extend({
+  providers: z.array(z.string()),
+});
+
+export type ApiUserProfile = z.infer<typeof UserProfileSchema>;
+
 // --- request shapes ----------------------------------------------------------
 // Built here, never parsed from a response, so they are plain types.
 
@@ -402,6 +408,23 @@ export async function fetchUsers(token: string, fetchImpl?: FetchLike): Promise<
   return toRows(UserSchema, await apiFetch<unknown>('/users', { token, fetchImpl }), '/users');
 }
 
+/** Own profile plus linked providers. Array is never null. */
+export async function fetchCurrentProfile(token: string, fetchImpl?: FetchLike): Promise<ApiUserProfile> {
+  const profile = toOne(
+    UserProfileSchema,
+    await apiFetch<unknown>('/users/me', { token, fetchImpl }),
+    '/users/me',
+  );
+  if (!Array.isArray(profile.providers)) profile.providers = [];
+  return profile;
+}
+
+/** Removes one linked provider. 204 on success. */
+export async function unlinkIdentity(provider: string, token: string, fetchImpl?: FetchLike): Promise<void> {
+  const path = `/users/me/identities/${encodeURIComponent(provider)}`;
+  await apiFetch<void>(path, { method: 'DELETE', token, fetchImpl });
+}
+
 // --- auth --------------------------------------------------------------------
 
 export async function login(identifier: string, password: string, fetchImpl?: FetchLike): Promise<TokenPair> {
@@ -468,7 +491,8 @@ export async function logout(refreshToken: string, fetchImpl?: FetchLike): Promi
   await apiFetch<void>('/auth/logout', { method: 'POST', body: { refresh_token: refreshToken }, fetchImpl });
 }
 
-/** Changes the password; the API revokes all refresh tokens. Responds 204. */
+/** Changes the password; the API revokes all refresh tokens. Responds 204.
+ *  First password for oauth-first users: pass empty currentPassword. */
 export async function updatePassword(
   currentPassword: string,
   newPassword: string,

@@ -4,5 +4,6 @@
   "compatibility_date": "2026-10-21",
   "assets": {
     "directory": "./dist"
-  }
+  },
+  "previews": {}
 }
