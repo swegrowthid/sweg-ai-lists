@@ -29,7 +29,7 @@ import Base from '../../layouts/Base.astro';
     const status = byId<HTMLParagraphElement>('status');
     const backLink = byId<HTMLAnchorElement>('back-link');
 
-    function renderError(kind: 'provider' | 'exchange' | 'incomplete', message: string, next?: string): void {
+    function renderError(message: string, next?: string): void {
       status.className = 'small err';
       status.textContent = message;
       backLink.href = next ? '/login?next=' + encodeURIComponent(next) : '/login';
@@ -49,17 +49,17 @@ import Base from '../../layouts/Base.astro';
 
     if (landing._tag === 'failed') {
       const next = peekPending()?.next;
-      renderError('provider', providerMessage(landing.params), next);
+      renderError(providerMessage(landing.params), next);
     } else if (landing._tag === 'missing') {
-      renderError('incomplete', 'this sign-in link is incomplete or was already used.', undefined);
+      renderError('this sign-in link is incomplete or was already used.', undefined);
     } else {
       finishSwegrowthSignIn(landing.code)
         .then(({ next }) => {
           goInternal(safeNext(next));
         })
         .catch((error) => {
-          if (error instanceof SwegrowthError) renderError(error.kind, error.message, error.next);
-          else renderError('exchange', 'could not finish the swegrowth.id sign-in.', undefined);
+          if (error instanceof SwegrowthError) renderError(error.message, error.next);
+          else renderError('could not finish the swegrowth.id sign-in.', undefined);
         });
     }
   </script>
