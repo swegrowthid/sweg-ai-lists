@@ -82,6 +82,9 @@ const NewsSchema = z.object({
   url: z.string(),
   /** May be the empty string - rows then render title only. */
   summary: z.string(),
+  /** Display name of the source feed the item came from. Optional only for
+   *  tolerance: a server without it falls back to NEWS_SOURCE in newsToRow. */
+  source: z.string().optional(),
   /** Midnight UTC of the source card's date; treat as a date, not an instant. */
   published_at: z.string(),
   created_at: z.string(),
@@ -670,7 +673,7 @@ export function newsToRow(entry: ApiNews): ApiRow {
     summary: entry.summary,
     category: 'digest',
     categoryHref: '/news',
-    author: NEWS_SOURCE,
+    author: entry.source?.trim() || NEWS_SOURCE,
     display: 'news',
     date: newsDate(entry),
     attrs: {

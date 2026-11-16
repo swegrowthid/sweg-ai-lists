@@ -2,7 +2,7 @@
  *  emits for `newsToRow`, so a browser refresh paints rows identical to the
  *  build-time snapshot. String building only - no DOM access here. */
 
-import { NEWS_SOURCE, newsToRow } from './api';
+import { newsToRow } from './api';
 import type { ApiNews } from './api';
 
 function esc(value: string): string {
@@ -24,7 +24,7 @@ export function newsRowsHtml(entries: ApiNews[], limit?: number): string {
         `<td class="entry-main"><a class="entry-title" href="${esc(row.url)}">${esc(row.title)}</a>` +
         `<span class="entry-kind">news</span>${summary}</td>` +
         `<td class="c category-cell"><a href="/news">digest</a></td>` +
-        `<td class="c author-cell">${esc(NEWS_SOURCE)}</td>` +
+        `<td class="c author-cell">${esc(row.author)}</td>` +
         `<td class="p"><span class="price">news</span></td></tr>`
       );
     })
