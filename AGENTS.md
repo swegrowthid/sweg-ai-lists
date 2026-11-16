@@ -28,7 +28,7 @@ src/pages/index.astro     home: sidebar + newest table
 src/pages/s/[slug].astro  category listing (paths generated from CATEGORIES)
 src/pages/entry/[slug].astro  detail shell (.posting layout, body client-rendered by postDetail.ts)
 src/pages/search.astro    client-filtered search over prerendered rows
-src/pages/news.astro      AI Tools Digest listing from GET /news (external links, no detail page)
+src/pages/news.astro      AI News Digest listing from GET /news (multi-source rows; author cell = row `source`, external links, no detail page)
 src/pages/tools.astro     AI tools catalog - prerenders page 1 (rows + count + pager); ToolsCatalog island pages server-side
 src/components/           EntryRows (list table), ToolsCatalog.tsx (React island: server-paged tools table, chip filters, debounced search)
 src/layouts/Base.astro    masthead, topnav, footer, global stylesheet
