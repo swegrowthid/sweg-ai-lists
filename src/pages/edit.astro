@@ -105,7 +105,9 @@ import Base from '../layouts/Base.astro';
     let dirty = false;
     function warnUnsaved(event: BeforeUnloadEvent) {
       event.preventDefault();
-      event.returnValue = '';
+      // Chrome arms the dialog on preventDefault; legacy Safari still reads
+      // returnValue (marked deprecated by TS, but the only Safari hook).
+      (event as unknown as { returnValue: string }).returnValue = '';
     }
     form.addEventListener('input', () => {
       if (dirty) return;
