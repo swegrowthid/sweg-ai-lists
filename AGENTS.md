@@ -18,7 +18,7 @@ GET /posts (Go API; author_username via JOIN users at read time)
 
 - Post rows come from the API only. The old local `src/content/entries` mock catalog is deleted; do not reintroduce content collections.
 - `author_username` is optional in `PostSchema` (older servers omit it); `postToRow` falls back to `author_id.slice(0, 8)`.
-- The only client-side JS: search filters on `/search` + `/skill`, the `/entry/?s=` detail mount (`src/lib/postDetail.ts`, also mounted by `404.astro`), the API refresh on home, `/news`, `/skill`, and `/s/` category pages, the React island on `/tools` (one request per page; URL carries `q`/`group`/`sort`/`order`/`page`), the `/submit` + `/edit/?s=` post forms, and the account pages (`/login`, `/register`, `/profile`, `/change-password`). Everything else is server-rendered.
+- The only client-side JS: search filters on `/search` + `/skill`, the `/entry/?s=` detail mount (`src/lib/postDetail.ts`, also mounted by `404.astro`), the API refresh on home, `/skill`, and `/s/` category pages, the `/news` controller (vanilla TS: debounced search, lens chips, source select, pager, URL state, degraded fallback), the React island on `/tools` (one request per page; URL carries `q`/`group`/`sort`/`order`/`page`), the `/submit` + `/edit/?s=` post forms, and the account pages (`/login`, `/register`, `/profile`, `/change-password`). Everything else is server-rendered.
 - `/search` is prerendered: it ships all API post rows with `data-*` filter keys and filters in the browser. Do not add SSR for this.
 
 ## Key Directories
@@ -28,7 +28,7 @@ src/pages/index.astro     home: sidebar + newest table
 src/pages/s/[slug].astro  category listing (paths generated from CATEGORIES)
 src/pages/entry/[slug].astro  detail shell (.posting layout, body client-rendered by postDetail.ts)
 src/pages/search.astro    client-filtered search over prerendered rows
-src/pages/news.astro      AI Tools Digest listing from GET /news (external links, no detail page)
+src/pages/news.astro      AI News Digest - prerenders page 1; vanilla controller pages/filters server-side (URL carries q/group/source/page); date-grouped rows, external links, no detail page
 src/pages/tools.astro     AI tools catalog - prerenders page 1 (rows + count + pager); ToolsCatalog island pages server-side
 src/components/           EntryRows (list table), ToolsCatalog.tsx (React island: server-paged tools table, chip filters, debounced search)
 src/layouts/Base.astro    masthead, topnav, footer, global stylesheet
@@ -50,7 +50,7 @@ bunx astro check   # type check, must be 0 errors
 
 - Category slugs come from `CATEGORIES` in `src/data/site.ts` only. Display a name with `CATEGORY_NAME[slug] ?? slug`.
 - Sort and filter in the page, never in `EntryRows.astro`. The component takes a ready `rows` array: `{ url, title, summary, category, author, display, date, attrs? }`.
-- `display` cell: posts `"post"` (set in `postToRow`). Dates: `toLocaleDateString("en-US", { month: "short", day: "numeric" })`.
+- `display` cell: posts `"post"` (set in `postToRow`). Dates: `toLocaleDateString("en-US", { month: "short", day: "numeric" })`; `newsDate` adds the year for prior-year items.
 - CSS vocabulary is shared, from the skillbay port: `.rows`, `.box`, `.attrs`, `.st`, `.kind`, `.price`, `.muted`, `.small`, `.posting`, `.form`, `.pager`. `.linkbutton` (a button that renders as a link) is a local addition. Reuse these; do not invent parallel classes.
 - React is the only client framework, via `@astrojs/react`, and only for the `/tools` island (`src/components/ToolsCatalog.tsx`). No Tailwind, no UI libraries. Other interaction uses vanilla inline `<script>`.
 - Relative imports: two levels from `src/pages/x.astro` (`../layouts/`), three levels from `src/pages/x/y.astro` (`../../layouts/`). This was the one build breaker; check it first.
@@ -58,7 +58,7 @@ bunx astro check   # type check, must be 0 errors
 
 ## Important Files
 
-- `src/lib/api.ts`: zod schemas, fetchers, and mappers (`postToRow`). Wire fields change here first; the backend `api/openapi.yaml` is the contract source.
+- `src/lib/api.ts`: zod schemas, fetchers, and mappers (`postToRow`). Wire fields change here first; the backend `api/openapi.yaml` is the contract source. News paging goes through `fetchNewsPage`/`fetchNewsSources`, which also accept the legacy bare-array response during deploy windows.
 - `src/data/site.ts`: brand text, categories, nav. Rename here, not in pages.
 - `src/layouts/Base.astro`: every page renders through it. `crumb` prop adds a breadcrumb segment.
 - `src/styles/style.css`: design tokens (link `#0000ee`, accent `#551a8b`, green `#060`, 980px column, 600px breakpoint).

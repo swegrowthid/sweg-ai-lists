@@ -1,49 +1,326 @@
 ---
 import Base from '../layouts/Base.astro';
-import EntryRows from '../components/EntryRows.astro';
-import { fetchNews, newsToRow } from '../lib/api';
-import type { ApiNews } from '../lib/api';
+import { fetchNewsPage, fetchNewsSources } from '../lib/api';
+import type { ApiNewsPage, ApiNewsSource } from '../lib/api';
+import { NEWS_GROUPS, NEWS_PAGE_SIZE, newsGroupCounts, newsPagerHtml, newsRowsHtml } from '../lib/news';
+import type { NewsParams } from '../lib/news';
 
-let entries: ApiNews[] = [];
+/** The canonical unfiltered state. The build always renders it: a static page
+ *  cannot see the visitor's query, so page 1 is the snapshot every filtered
+ *  view falls back to. */
+const canonical: NewsParams = { q: '', group: '', source: '', page: 1 };
+
+let page: ApiNewsPage | null = null;
+let sources: ApiNewsSource[] = [];
+let buildFailed = false;
 try {
-  entries = await fetchNews();
+  page = await fetchNewsPage({ page: 1, perPage: NEWS_PAGE_SIZE });
 } catch {
-  entries = [];
+  // The API is unreachable at build time. Render the shell with a visible
+  // notice; the page script retries at runtime.
+  buildFailed = true;
 }
-const rows = entries.map(newsToRow);
+try {
+  sources = await fetchNewsSources();
+} catch {
+  sources = [];
+}
+const groupCounts = newsGroupCounts(sources);
+const sourceTotal = sources.reduce((sum, source) => sum + source.count, 0);
+const hasRows = !!page && page.data.length > 0;
+const showEmpty = !!page && page.data.length === 0;
 ---
 
 <Base title="AI News Digest">
   <header class="page-head">
-    <p class="eyebrow">weekly AI news</p>
+    <p class="eyebrow">daily AI news</p>
     <h1>AI News Digest</h1>
     <p class="lede">
-      Browse weekly AI news from <a href="https://www.zainfathoni.com/blog">zainfathoni.com</a>. New items are synced every day; titles link to the original posts.
+      Browse the latest AI news, synced every day from the feeds we follow. Search by title, summary, or source; narrow by lens or pick one source. Titles link to the original posts.
     </p>
   </header>
-  <div id="news-rows">
-    <EntryRows rows={rows} />
+
+  <form class="searchbar tools-searchbar news-searchbar" id="news-searchbar" role="search" method="get" action="/news/">
+    <div class="field search-field">
+      <label class="inline" for="news-q">Search</label>
+      <input id="news-q" name="q" type="search" placeholder="title, summary, or source" />
+    </div>
+    <div class="field group-field">
+      <span class="control-label">Lens</span>
+      <div class="chips" role="group" aria-label="Filter news by lens">
+        <button type="button" class="chip" data-group="" data-label="all" aria-pressed="true">
+          all{sourceTotal ? ` ${sourceTotal}` : ''}
+        </button>
+        {
+          NEWS_GROUPS.map((group) => (
+            <button type="button" class="chip" data-group={group.value} data-label={group.label} aria-pressed="false">
+              {group.label}
+              {groupCounts[group.value] ? ` ${groupCounts[group.value]}` : ''}
+            </button>
+          ))
+        }
+      </div>
+    </div>
+    <div class="field source-field">
+      <label class="inline" for="news-source">Source</label>
+      <select id="news-source" name="source">
+        <option value="">all sources</option>
+        {sources.map((source) => <option value={source.name}>{source.name} ({source.count})</option>)}
+      </select>
+    </div>
+  </form>
+
+  <div class="tools-list-meta">
+    <p class="small news-count" id="news-count">
+      {page ? `${page.data.length} of ${page.meta.total} ${page.meta.total === 1 ? 'news item' : 'news items'}` : 'loading news...'}
+    </p>
   </div>
-  <p class="empty-state" id="news-empty" hidden={rows.length > 0}>No digest posts yet. Check back soon.</p>
+
+  <div class="notice" id="news-notice" role="status" hidden={!buildFailed}>
+    <p id="news-notice-text">{buildFailed ? 'the news list is unavailable at build time. loading live news...' : ''}</p>
+    <button type="button" class="category-toggle" id="news-retry">try again</button>
+  </div>
+
+  <div id="news-results">
+    <table class="rows news-rows" id="news-table" aria-busy="false" hidden={!hasRows}>
+      <tbody id="news-tbody" set:html={newsRowsHtml(page?.data ?? [], { grouped: true })}></tbody>
+    </table>
+    <div class="empty-state" id="news-empty" hidden={!showEmpty}>
+      <p id="news-empty-text">
+        {page && page.meta.total > 0 ? 'No rows on this page.' : 'No news yet. Check back soon.'}
+      </p>
+      <button type="button" class="category-toggle" id="news-clear-filters" hidden>clear filters</button>
+      <button type="button" class="category-toggle" id="news-page-1" hidden>back to page 1</button>
+    </div>
+    <nav class="pager" id="news-pager" aria-label="News pages" set:html={page ? newsPagerHtml(canonical, page.meta) : ''}></nav>
+  </div>
 
   <script>
-    import { fetchNews } from '../lib/api';
-    import { newsRowsHtml } from '../lib/news';
+    import { fetchNewsPage, fetchNewsSources } from '../lib/api';
+    import type { ApiNewsPage, ApiNewsSource } from '../lib/api';
+    import {
+      isNewsHref,
+      newsApiQuery,
+      newsGroupCounts,
+      newsHrefFor,
+      newsPagerHtml,
+      newsRowsHtml,
+      readNewsParams,
+    } from '../lib/news';
+    import type { NewsParams } from '../lib/news';
 
-    async function refreshNews() {
-      let entries;
-      try {
-        entries = await fetchNews();
-      } catch {
-        return; // Keep the build snapshot.
-      }
-      const tbody = document.querySelector<HTMLTableSectionElement>('#news-rows .rows tbody');
-      if (!tbody) return;
-      tbody.innerHTML = newsRowsHtml(entries);
-      const empty = document.getElementById('news-empty');
-      if (empty) empty.hidden = entries.length > 0;
+    // Every id below is rendered unconditionally by this page, so the lookups
+    // cannot miss; the optional controls keep their null guards.
+    const tbody = document.getElementById('news-tbody')!;
+    const table = document.getElementById('news-table')!;
+    const countEl = document.getElementById('news-count')!;
+    const pagerEl = document.getElementById('news-pager')!;
+    const emptyEl = document.getElementById('news-empty')!;
+    const emptyText = document.getElementById('news-empty-text')!;
+    const resultsEl = document.getElementById('news-results')!;
+    const input = document.getElementById('news-q') as HTMLInputElement;
+    const sourceSelect = document.getElementById('news-source') as HTMLSelectElement;
+    const clearBtn = document.getElementById('news-clear-filters');
+    const page1Btn = document.getElementById('news-page-1');
+    const noticeEl = document.getElementById('news-notice');
+    const noticeText = document.getElementById('news-notice-text');
+    const retryBtn = document.getElementById('news-retry');
+    const searchForm = document.getElementById('news-searchbar');
+    const chips = Array.from(document.querySelectorAll<HTMLButtonElement>('#news-searchbar .chip[data-group]'));
+
+    // The build snapshot is the degraded fallback: a failed live fetch puts
+    // it back so the page never goes blank.
+    const fallback = {
+      rows: tbody.innerHTML,
+      pager: pagerEl.innerHTML,
+      count: countEl.textContent ?? '',
+      tableHidden: table.hidden,
+      emptyHidden: emptyEl.hidden,
+    };
+
+    let state = readNewsParams(location.search);
+    let attempted = false;
+    let controller: AbortController | null = null;
+    let debounceTimer = 0;
+
+    function sameParams(a: NewsParams, b: NewsParams): boolean {
+      return a.q === b.q && a.group === b.group && a.source === b.source && a.page === b.page;
     }
 
-    void refreshNews();
+    function syncControls(next: NewsParams) {
+      input.value = next.q;
+      sourceSelect.value = next.source;
+      for (const chip of chips) {
+        chip.setAttribute('aria-pressed', String((chip.dataset.group ?? '') === next.group));
+      }
+    }
+
+    function renderSources(list: ApiNewsSource[]) {
+      const counts = newsGroupCounts(list);
+      const total = list.reduce((sum, source) => sum + source.count, 0);
+      for (const chip of chips) {
+        const group = chip.dataset.group ?? '';
+        const label = chip.dataset.label ?? (group || 'all');
+        const count = group ? (counts[group] ?? 0) : total;
+        chip.textContent = count ? `${label} ${count}` : label;
+      }
+      const keep = state.source;
+      sourceSelect.textContent = '';
+      const all = document.createElement('option');
+      all.value = '';
+      all.textContent = 'all sources';
+      sourceSelect.appendChild(all);
+      for (const source of list) {
+        const option = document.createElement('option');
+        option.value = source.name;
+        option.textContent = `${source.name} (${source.count})`;
+        sourceSelect.appendChild(option);
+      }
+      sourceSelect.value = keep;
+      if (sourceSelect.value !== keep) sourceSelect.value = '';
+    }
+
+    async function refreshSources() {
+      try {
+        renderSources(await fetchNewsSources());
+      } catch {
+        // Options and counts are decoration; the SSR list stays.
+      }
+    }
+
+    function render(result: ApiNewsPage, next: NewsParams) {
+      const rows = result.data;
+      tbody.innerHTML = newsRowsHtml(rows, { grouped: true });
+      table.hidden = rows.length === 0;
+      const note = [next.q.trim() && `"${next.q.trim()}"`, next.group, next.source].filter(Boolean).join(' ');
+      countEl.textContent = `${rows.length} of ${result.meta.total} ${result.meta.total === 1 ? 'news item' : 'news items'}${note ? ` matching ${note}` : ''}`;
+      pagerEl.innerHTML = newsPagerHtml(next, result.meta);
+      if (rows.length === 0) {
+        emptyEl.hidden = false;
+        if (result.meta.total === 0) {
+          emptyText.textContent = note ? 'No news match those filters.' : 'No news yet. Check back soon.';
+          if (clearBtn) clearBtn.hidden = !note;
+          if (page1Btn) page1Btn.hidden = true;
+        } else {
+          emptyText.textContent = 'No rows on this page.';
+          if (clearBtn) clearBtn.hidden = true;
+          if (page1Btn) page1Btn.hidden = false;
+        }
+      } else {
+        emptyEl.hidden = true;
+      }
+    }
+
+    function setStatus(status: 'ready' | 'degraded') {
+      if (!noticeEl || !noticeText) return;
+      if (status === 'ready') {
+        noticeEl.hidden = true;
+        return;
+      }
+      noticeEl.hidden = false;
+      noticeText.textContent = attempted
+        ? fallback.rows.trim()
+          ? 'the live news list is unavailable - showing the first page from the last build. search, filters, and paging need the live list.'
+          : 'the live news list is unavailable.'
+        : 'the news list is unavailable at build time. loading live news...';
+    }
+
+    async function load(next: NewsParams) {
+      controller?.abort();
+      const ctrl = new AbortController();
+      controller = ctrl;
+      table.setAttribute('aria-busy', 'true');
+      if (tbody.children.length === 0) {
+        emptyEl.hidden = false;
+        emptyText.textContent = 'loading news...';
+        if (clearBtn) clearBtn.hidden = true;
+        if (page1Btn) page1Btn.hidden = true;
+      }
+      try {
+        const result = await fetchNewsPage(newsApiQuery(next), undefined, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        attempted = true;
+        render(result, next);
+        setStatus('ready');
+      } catch (error) {
+        if (ctrl.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
+        attempted = true;
+        tbody.innerHTML = fallback.rows;
+        pagerEl.innerHTML = fallback.pager;
+        countEl.textContent = fallback.count;
+        table.hidden = fallback.tableHidden;
+        emptyEl.hidden = fallback.emptyHidden;
+        setStatus('degraded');
+      } finally {
+        if (!ctrl.signal.aborted) table.setAttribute('aria-busy', 'false');
+      }
+    }
+
+    function go(next: NewsParams, mode: 'push' | 'replace' | 'none') {
+      if (mode !== 'none' && sameParams(next, state)) {
+        syncControls(next);
+        return;
+      }
+      state = next;
+      if (mode === 'push') history.pushState(null, '', newsHrefFor(next));
+      else if (mode === 'replace') history.replaceState(null, '', newsHrefFor(next));
+      syncControls(next);
+      void load(next);
+    }
+
+    input.addEventListener('input', () => {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        go({ ...state, q: input.value, page: 1 }, 'replace');
+      }, 250);
+    });
+
+    for (const chip of chips) {
+      chip.addEventListener('click', () => {
+        const group = chip.dataset.group ?? '';
+        go({ ...state, group: state.group === group ? '' : group, page: 1 }, 'push');
+      });
+    }
+
+    sourceSelect.addEventListener('change', () => {
+      go({ ...state, source: sourceSelect.value, page: 1 }, 'push');
+    });
+
+    searchForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      go({ ...state, q: input.value, page: 1 }, 'replace');
+    });
+
+    clearBtn?.addEventListener('click', () => go({ q: '', group: '', source: '', page: 1 }, 'push'));
+    page1Btn?.addEventListener('click', () => go({ ...state, page: 1 }, 'push'));
+    retryBtn?.addEventListener('click', () => {
+      void load(state);
+      void refreshSources();
+    });
+
+    // In-table group and source links plus pager links are real /news URLs;
+    // plain clicks fetch in place, modified clicks keep browser behaviour.
+    resultsEl.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest('a[href]');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') ?? '';
+      if (!isNewsHref(href)) return;
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      go(readNewsParams(new URL(href, location.origin).search), 'push');
+    });
+
+    window.addEventListener('popstate', () => {
+      state = readNewsParams(location.search);
+      syncControls(state);
+      void load(state);
+    });
+
+    history.replaceState(null, '', newsHrefFor(state));
+    syncControls(state);
+    void load(state);
+    void refreshSources();
   </script>
 </Base>

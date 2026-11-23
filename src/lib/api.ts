@@ -82,10 +82,26 @@ const NewsSchema = z.object({
   url: z.string(),
   /** May be the empty string - rows then render title only. */
   summary: z.string(),
-  /** Midnight UTC of the source card's date; treat as a date, not an instant. */
+  /** Display name of the source feed the item came from. Optional only for
+   *  tolerance: a server without it falls back to NEWS_SOURCE in news.ts. */
+  source: z.string().optional(),
+  /** Lens group the source belongs to (lab, press, research, digest).
+   *  Optional only for tolerance: older servers omit it. */
+  group: z.string().optional(),
+  /** UTC instant the source published the item; feeds carry real times,
+   *  the HTML listing carries midnight UTC of the card date. */
   published_at: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
+});
+
+const NewsSourceSchema = z.object({
+  /** Display name, same value the `source` filter accepts. */
+  name: z.string(),
+  /** Lens group this source belongs to. */
+  group: z.string(),
+  /** Rows stored for this source. */
+  count: z.number(),
 });
 
 const ToolSchema = z.object({
@@ -149,6 +165,12 @@ const ToolListSchema = z.object({
   meta: PageMetaSchema,
 });
 
+const NewsListSchema = z.object({
+  /** Same per-row tolerance as ToolList: one bad row never sinks the page. */
+  data: z.array(z.unknown()),
+  meta: PageMetaSchema,
+});
+
 const TokenPairSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
@@ -175,6 +197,7 @@ export type ApiCategory = z.infer<typeof CategorySchema>;
 export type ApiPostItem = z.infer<typeof PostItemSchema>;
 export type ApiPost = z.infer<typeof PostSchema>;
 export type ApiNews = z.infer<typeof NewsSchema>;
+export type ApiNewsSource = z.infer<typeof NewsSourceSchema>;
 export type ApiTool = z.infer<typeof ToolSchema>;
 export type ApiToolCategory = z.infer<typeof ToolCategorySchema>;
 export type ApiPageMeta = z.infer<typeof PageMetaSchema>;
@@ -183,6 +206,12 @@ export type ApiVoteResult = z.infer<typeof VoteResultSchema>;
 /** One page of tools plus the paging metadata for the rest. */
 export interface ApiToolPage {
   data: ApiTool[];
+  meta: ApiPageMeta;
+}
+
+/** One page of news plus the paging metadata for the rest. */
+export interface ApiNewsPage {
+  data: ApiNews[];
   meta: ApiPageMeta;
 }
 export type TokenPair = z.infer<typeof TokenPairSchema>;
@@ -334,10 +363,53 @@ export async function fetchWanted(fetchImpl?: FetchLike): Promise<ApiPost[]> {
   return toRows(PostSchema, await apiFetch<unknown>('/wanted', { fetchImpl }), '/wanted');
 }
 
-/** Public digest feed, newest `published_at` first. Read-only: the API fills it
- *  by a sync that runs every day, so callers only ever GET it. */
-export async function fetchNews(fetchImpl?: FetchLike): Promise<ApiNews[]> {
-  return toRows(NewsSchema, await apiFetch<unknown>('/news', { fetchImpl }), '/news');
+export interface NewsQuery {
+  /** Case-insensitive substring over title, summary, and source. */
+  q?: string;
+  /** Lens group: lab, press, research, or digest. */
+  group?: string;
+  /** Exact source display name; unknown names answer an empty page. */
+  source?: string;
+  /** 1-based page number. */
+  page?: number;
+  /** Rows per page. The API caps this at 100. */
+  perPage?: number;
+}
+
+/** One page of news, newest `published_at` first. The server does the
+ *  searching, grouping, source filtering, and paging; `meta` counts every
+ *  row the filter matches. `signal` cancels a request a newer one replaced.
+ *  A pre-paging server that still answers a bare array degrades to one
+ *  unfiltered page, so the deploy window cannot break the page. */
+export async function fetchNewsPage(
+  query: NewsQuery = {},
+  fetchImpl?: FetchLike,
+  signal?: AbortSignal,
+): Promise<ApiNewsPage> {
+  const params = new URLSearchParams();
+  if (query.q) params.set('q', query.q);
+  if (query.group) params.set('group', query.group);
+  if (query.source) params.set('source', query.source);
+  if (query.page && query.page > 1) params.set('page', String(query.page));
+  if (query.perPage) params.set('per_page', String(query.perPage));
+  const search = params.toString();
+  const path = search ? `/news?${search}` : '/news';
+  const raw = await apiFetch<unknown>(path, { fetchImpl, signal });
+  if (Array.isArray(raw)) {
+    const data = toRows(NewsSchema, raw, '/news');
+    return {
+      data,
+      meta: { page: 1, per_page: data.length, total: data.length, total_pages: data.length > 0 ? 1 : 0 },
+    };
+  }
+  const parsed = toOne(NewsListSchema, raw, '/news');
+  return { data: toRows(NewsSchema, parsed.data, '/news'), meta: parsed.meta };
+}
+
+/** Every registered news source with its lens group and stored row count,
+ *  in registry order. Drives the source select and the lens chip counts. */
+export async function fetchNewsSources(fetchImpl?: FetchLike): Promise<ApiNewsSource[]> {
+  return toRows(NewsSourceSchema, await apiFetch<unknown>('/news/sources', { fetchImpl }), '/news/sources');
 }
 
 export interface ToolQuery {
@@ -632,14 +704,19 @@ export function postToRow(post: ApiPost): ApiRow {
   };
 }
 
-/** `published_at` is midnight UTC, a calendar date: pin UTC so the rendered
- *  "Sep 27" cannot shift a day between server build and browser timezone. */
-export function newsDate(entry: ApiNews): string {
+/** `published_at` is a UTC calendar date at worst: pin UTC so the rendered
+ *  "Sep 27" cannot shift a day between server build and browser timezone.
+ *  Prior-year items carry the year so old links stay unambiguous. */
+export function newsDate(entry: ApiNews, now: Date = new Date()): string {
   const published = new Date(entry.published_at);
   if (Number.isNaN(+published)) return '';
-  return published.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', timeZone: 'UTC' };
+  if (published.getUTCFullYear() !== now.getUTCFullYear()) options.year = 'numeric';
+  return published.toLocaleDateString('en-US', options);
 }
 
+/** Rows written before the source column existed all came from this listing,
+ *  so an absent `source` on the wire means this display name. */
 export const NEWS_SOURCE = 'zainfathoni.com';
 
 /** `updated` is a YYYY-MM-DD calendar date: pin UTC like newsDate. Exotic
@@ -659,25 +736,6 @@ export function toolSummary(tool: ApiTool): string {
   if (tool.min_spend) parts.push(`min ${tool.min_spend}`);
   if (tool.ai_features?.length) parts.push(tool.ai_features.join(', '));
   return parts.filter(Boolean).join(' · ');
-}
-
-/** A news entry as an EntryRows row. Title links straight out to the source
- *  post; the category slot points back to `/news` instead of a `/s/` shelf. */
-export function newsToRow(entry: ApiNews): ApiRow {
-  return {
-    url: entry.url,
-    title: entry.title,
-    summary: entry.summary,
-    category: 'digest',
-    categoryHref: '/news',
-    author: NEWS_SOURCE,
-    display: 'news',
-    date: newsDate(entry),
-    attrs: {
-      'data-kind': 'news',
-      'data-text': `${entry.title} ${entry.summary}`.toLowerCase(),
-    },
-  };
 }
 
 /** Display names for the three fixed tool categories (slug -> label). The

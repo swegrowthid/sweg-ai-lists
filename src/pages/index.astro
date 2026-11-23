@@ -1,17 +1,20 @@
 ---
 import Base from '../layouts/Base.astro';
-import EntryRows from '../components/EntryRows.astro';
 import SearchHero from '../components/SearchHero.astro';
-import { fetchNews, fetchTools, newsToRow } from '../lib/api';
+import { fetchNewsPage, fetchTools } from '../lib/api';
 import type { ApiNews, ApiTool } from '../lib/api';
+import { newsRowsHtml, pickDiverseNews } from '../lib/news';
 import { popularToolsRowsHtml } from '../lib/tools';
 
 const homeItemLimit = 4;
+// Fetch a wider window than the teaser needs so the diversity pick has
+// enough sources to spread across.
+const homeNewsFetch = 20;
 
 let apiNews: ApiNews[] = [];
 let popularTools: ApiTool[] = [];
 try {
-  apiNews = await fetchNews();
+  apiNews = (await fetchNewsPage({ page: 1, perPage: homeNewsFetch })).data;
 } catch {
   apiNews = [];
 }
@@ -20,7 +23,7 @@ try {
 } catch {
   popularTools = [];
 }
-const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
+const diverseNews = pickDiverseNews(apiNews, homeItemLimit, 1);
 ---
 
 <Base>
@@ -47,15 +50,15 @@ const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
       <h2 id="news-heading">Recent AI News</h2>
       <a href="/news">View all news →</a>
     </div>
-    <div id="news-rows" data-limit={homeItemLimit}>
-      <EntryRows rows={newsRows} />
-    </div>
-    <p class="empty-state" id="news-empty" hidden={newsRows.length > 0}>No digest posts yet.</p>
+    <table class="rows news-rows" id="home-news-table" hidden={diverseNews.length === 0}>
+      <tbody id="home-news-tbody" set:html={newsRowsHtml(diverseNews)}></tbody>
+    </table>
+    <p class="empty-state" id="news-empty" hidden={diverseNews.length > 0}>No AI news yet.</p>
   </section>
 
   <script>
-    import { fetchNews, fetchTools } from '../lib/api';
-    import { newsRowsHtml } from '../lib/news';
+    import { fetchNewsPage, fetchTools } from '../lib/api';
+    import { newsRowsHtml, pickDiverseNews } from '../lib/news';
     import { popularToolsRowsHtml } from '../lib/tools';
 
     async function refreshPopularToolsSection() {
@@ -75,16 +78,17 @@ const newsRows = apiNews.slice(0, homeItemLimit).map(newsToRow);
     async function refreshNewsSection() {
       let entries;
       try {
-        entries = await fetchNews();
+        entries = (await fetchNewsPage({ page: 1, perPage: 20 })).data;
       } catch {
         return; // Keep the build snapshot.
       }
-      const tbody = document.querySelector<HTMLTableSectionElement>('#news-rows .rows tbody');
-      if (!tbody) return;
-      const limit = Number(document.getElementById('news-rows')?.getAttribute('data-limit')) || 4;
-      tbody.innerHTML = newsRowsHtml(entries, limit);
+      const picked = pickDiverseNews(entries, 4, 1);
+      const tbody = document.getElementById('home-news-tbody');
+      const table = document.getElementById('home-news-table');
       const empty = document.getElementById('news-empty');
-      if (empty) empty.hidden = entries.length > 0;
+      if (tbody) tbody.innerHTML = newsRowsHtml(picked);
+      if (table) table.hidden = picked.length === 0;
+      if (empty) empty.hidden = picked.length > 0;
     }
 
     void refreshPopularToolsSection();
