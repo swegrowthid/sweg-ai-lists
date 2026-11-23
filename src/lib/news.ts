@@ -37,16 +37,74 @@ export interface NewsParams {
 }
 
 /** Read the query out of a URL search string (`location.search` or a link's
- *  `?...` part). Unknown group values fall back to unfiltered. */
+ *  `?...` part). Normalizes `q`, `group`, and `source` to match the backend
+ *  filter rules; unknown group values fall back to unfiltered. */
 export function readNewsParams(search: string): NewsParams {
   const params = new URLSearchParams(search);
-  const group = params.get('group') ?? '';
-  const parsed = Number.parseInt(params.get('page') ?? '1', 10);
+  const group = (params.get('group') ?? '').trim().toLowerCase();
+  const rawPage = (params.get('page') ?? '1').trim();
+  const parsed = /^\d+$/.test(rawPage) ? Number(rawPage) : 1;
   return {
-    q: params.get('q') ?? '',
+    q: (params.get('q') ?? '').trim(),
     group: NEWS_GROUPS.some((g) => g.value === group) ? group : '',
-    source: params.get('source') ?? '',
-    page: Number.isFinite(parsed) && parsed >= 1 ? parsed : 1,
+    source: (params.get('source') ?? '').trim(),
+    page: Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : 1,
+  };
+}
+
+/** Match a source name case-insensitively against the backend source list so
+ *  shared links like `?source=openai` select `OpenAI`. Unknown names pass
+ *  through trimmed so the API answers its empty page. */
+export function canonicalNewsSource(source: string, sources: readonly ApiNewsSource[]): string {
+  const trimmed = source.trim();
+  if (!trimmed) return '';
+  const match = sources.find((entry) => entry.name.toLowerCase() === trimmed.toLowerCase());
+  return match ? match.name : trimmed;
+}
+
+/** Sources available under the selected lens group. Empty group shows every
+ *  registered source in registry order. */
+export function sourcesForNewsGroup(sources: readonly ApiNewsSource[], group: string): ApiNewsSource[] {
+  return group ? sources.filter((entry) => entry.group === group) : [...sources];
+}
+
+/** Normalize URL-derived params against the live source registry. */
+export function reconcileNewsParams(next: NewsParams, sources: readonly ApiNewsSource[]): NewsParams {
+  return {
+    ...next,
+    q: next.q.trim(),
+    source: canonicalNewsSource(next.source, sources),
+  };
+}
+
+/** State transition for clicking a lens chip. Clicking `all` or re-clicking the
+ *  active lens resets both `group` and `source`; switching to another lens clears
+ *  `source` so incompatible `(group, source)` pairs cannot lock the list to 0. */
+export function pickNewsGroup(state: NewsParams, clickedGroup: string, currentQuery: string): NewsParams {
+  const q = currentQuery.trim();
+  if (!clickedGroup || state.group === clickedGroup) {
+    return { q, group: '', source: '', page: 1 };
+  }
+  return { q, group: clickedGroup, source: '', page: 1 };
+}
+
+/** State transition for choosing a source from the select control. Preserves
+ *  the active lens when compatible, and clears an incompatible lens so a direct
+ *  source choice never returns an empty contradiction. */
+export function pickNewsSource(
+  state: NewsParams,
+  nextSource: string,
+  currentQuery: string,
+  sources: readonly ApiNewsSource[],
+): NewsParams {
+  const source = canonicalNewsSource(nextSource, sources);
+  const matched = source ? sources.find((entry) => entry.name === source) : undefined;
+  const group = matched && state.group && matched.group !== state.group ? '' : state.group;
+  return {
+    q: currentQuery.trim(),
+    group,
+    source,
+    page: 1,
   };
 }
 
@@ -147,7 +205,7 @@ function newsRowHtml(entry: ApiNews, now: Date): string {
     group && groupLabel !== 'news'
       ? `<td class="c category-cell"><a href="/news/?group=${esc(group)}">${esc(groupLabel)}</a></td>`
       : `<td class="c category-cell">news</td>`;
-  const sourceCell = `<td class="c author-cell"><a href="/news/?source=${encodeURIComponent(source)}">${esc(source)}</a></td>`;
+  const sourceCell = `<td class="c author-cell"><a href="/news/?source=${esc(encodeURIComponent(source))}">${esc(source)}</a></td>`;
   const attrs = ` data-kind="news" data-text="${esc(`${entry.title} ${entry.summary} ${source}`.toLowerCase())}"`;
   return (
     `<tr${attrs}><td class="d">${esc(newsDate(entry, now))}</td>` +

@@ -220,7 +220,8 @@ html[data-theme="dark"] .searchbar button:not(.chip), html[data-theme="dark"] .f
 .pager:empty { display: none; }
 
 /* AI news digest: date headers, filter bar, grouped rows */
-.news-searchbar .search-field { flex: 1 1 240px; }
+.news-searchbar { flex-wrap: wrap; }
+.news-searchbar .search-field { flex: 1 1 220px; }
 .news-searchbar .group-field, .news-searchbar .source-field { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 8px; }
 .news-searchbar .group-field .chips { flex-wrap: wrap; }
 .news-searchbar .source-field select { max-width: 230px; }

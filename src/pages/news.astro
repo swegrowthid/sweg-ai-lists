@@ -65,7 +65,11 @@ const showEmpty = !!page && page.data.length === 0;
       <label class="inline" for="news-source">Source</label>
       <select id="news-source" name="source">
         <option value="">all sources</option>
-        {sources.map((source) => <option value={source.name}>{source.name} ({source.count})</option>)}
+        {sources.map((source) => (
+          <option value={source.name} data-group={source.group} data-count={source.count}>
+            {source.name} ({source.count})
+          </option>
+        ))}
       </select>
     </div>
   </form>
@@ -99,13 +103,19 @@ const showEmpty = !!page && page.data.length === 0;
     import { fetchNewsPage, fetchNewsSources } from '../lib/api';
     import type { ApiNewsPage, ApiNewsSource } from '../lib/api';
     import {
+      canonicalNewsSource,
       isNewsHref,
       newsApiQuery,
       newsGroupCounts,
+      newsGroupLabel,
       newsHrefFor,
       newsPagerHtml,
       newsRowsHtml,
+      pickNewsGroup,
+      pickNewsSource,
       readNewsParams,
+      reconcileNewsParams,
+      sourcesForNewsGroup,
     } from '../lib/news';
     import type { NewsParams } from '../lib/news';
 
@@ -138,24 +148,60 @@ const showEmpty = !!page && page.data.length === 0;
       emptyHidden: emptyEl.hidden,
     };
 
-    let state = readNewsParams(location.search);
+    let availableSources: ApiNewsSource[] = Array.from(sourceSelect.options)
+      .filter((option) => option.value !== '')
+      .map((option) => ({
+        name: option.value,
+        group: option.dataset.group ?? '',
+        count: Number(option.dataset.count ?? '0') || 0,
+      }));
+    let state = reconcileNewsParams(readNewsParams(location.search), availableSources);
     let attempted = false;
     let controller: AbortController | null = null;
     let debounceTimer = 0;
 
     function sameParams(a: NewsParams, b: NewsParams): boolean {
-      return a.q === b.q && a.group === b.group && a.source === b.source && a.page === b.page;
+      return a.q.trim() === b.q.trim() && a.group === b.group && a.source === b.source && a.page === b.page;
+    }
+
+    function renderSourceOptions(group: string, selectedSource: string) {
+      const scoped = sourcesForNewsGroup(availableSources, group);
+      sourceSelect.textContent = '';
+      const all = document.createElement('option');
+      all.value = '';
+      all.textContent = 'all sources';
+      sourceSelect.appendChild(all);
+      for (const source of scoped) {
+        const option = document.createElement('option');
+        option.value = source.name;
+        option.textContent = `${source.name} (${source.count})`;
+        sourceSelect.appendChild(option);
+      }
+      // Keep an un-scoped or unknown URL source visible in the select so the
+      // user can still switch back to "all sources".
+      if (selectedSource && !scoped.some((entry) => entry.name === selectedSource)) {
+        const current = document.createElement('option');
+        current.value = selectedSource;
+        current.textContent = selectedSource;
+        sourceSelect.appendChild(current);
+      }
+      sourceSelect.value = selectedSource;
     }
 
     function syncControls(next: NewsParams) {
-      input.value = next.q;
-      sourceSelect.value = next.source;
+      if (!(document.activeElement === input && input.value.trim() === next.q)) {
+        input.value = next.q;
+      }
+      renderSourceOptions(next.group, next.source);
       for (const chip of chips) {
-        chip.setAttribute('aria-pressed', String((chip.dataset.group ?? '') === next.group));
+        const chipGroup = chip.dataset.group ?? '';
+        const pressed = chipGroup === '' ? next.group === '' && next.source === '' : next.group === chipGroup;
+        chip.setAttribute('aria-pressed', String(pressed));
       }
     }
 
     function renderSources(list: ApiNewsSource[]) {
+      availableSources = list;
       const counts = newsGroupCounts(list);
       const total = list.reduce((sum, source) => sum + source.count, 0);
       for (const chip of chips) {
@@ -164,20 +210,12 @@ const showEmpty = !!page && page.data.length === 0;
         const count = group ? (counts[group] ?? 0) : total;
         chip.textContent = count ? `${label} ${count}` : label;
       }
-      const keep = state.source;
-      sourceSelect.textContent = '';
-      const all = document.createElement('option');
-      all.value = '';
-      all.textContent = 'all sources';
-      sourceSelect.appendChild(all);
-      for (const source of list) {
-        const option = document.createElement('option');
-        option.value = source.name;
-        option.textContent = `${source.name} (${source.count})`;
-        sourceSelect.appendChild(option);
+      const reconciled = reconcileNewsParams(state, list);
+      if (reconciled.source !== state.source) {
+        state = reconciled;
+        history.replaceState(null, '', newsHrefFor(state));
       }
-      sourceSelect.value = keep;
-      if (sourceSelect.value !== keep) sourceSelect.value = '';
+      syncControls(state);
     }
 
     async function refreshSources() {
@@ -192,7 +230,9 @@ const showEmpty = !!page && page.data.length === 0;
       const rows = result.data;
       tbody.innerHTML = newsRowsHtml(rows, { grouped: true });
       table.hidden = rows.length === 0;
-      const note = [next.q.trim() && `"${next.q.trim()}"`, next.group, next.source].filter(Boolean).join(' ');
+      const groupLabel = next.group ? newsGroupLabel(next.group) : '';
+      const sourceLabel = next.source ? canonicalNewsSource(next.source, availableSources) : '';
+      const note = [next.q.trim() && `"${next.q.trim()}"`, groupLabel, sourceLabel].filter(Boolean).join(' ');
       countEl.textContent = `${rows.length} of ${result.meta.total} ${result.meta.total === 1 ? 'news item' : 'news items'}${note ? ` matching ${note}` : ''}`;
       pagerEl.innerHTML = newsPagerHtml(next, result.meta);
       if (rows.length === 0) {
@@ -257,38 +297,40 @@ const showEmpty = !!page && page.data.length === 0;
     }
 
     function go(next: NewsParams, mode: 'push' | 'replace' | 'none') {
-      if (mode !== 'none' && sameParams(next, state)) {
-        syncControls(next);
+      window.clearTimeout(debounceTimer);
+      const normalized = reconcileNewsParams(next, availableSources);
+      if (mode !== 'none' && sameParams(normalized, state)) {
+        syncControls(normalized);
         return;
       }
-      state = next;
-      if (mode === 'push') history.pushState(null, '', newsHrefFor(next));
-      else if (mode === 'replace') history.replaceState(null, '', newsHrefFor(next));
-      syncControls(next);
-      void load(next);
+      state = normalized;
+      if (mode === 'push') history.pushState(null, '', newsHrefFor(normalized));
+      else if (mode === 'replace') history.replaceState(null, '', newsHrefFor(normalized));
+      syncControls(normalized);
+      void load(normalized);
     }
 
     input.addEventListener('input', () => {
       window.clearTimeout(debounceTimer);
       debounceTimer = window.setTimeout(() => {
-        go({ ...state, q: input.value, page: 1 }, 'replace');
+        go({ ...state, q: input.value.trim(), page: 1 }, 'replace');
       }, 250);
     });
 
     for (const chip of chips) {
       chip.addEventListener('click', () => {
         const group = chip.dataset.group ?? '';
-        go({ ...state, group: state.group === group ? '' : group, page: 1 }, 'push');
+        go(pickNewsGroup(state, group, input.value), 'push');
       });
     }
 
     sourceSelect.addEventListener('change', () => {
-      go({ ...state, source: sourceSelect.value, page: 1 }, 'push');
+      go(pickNewsSource(state, sourceSelect.value, input.value, availableSources), 'push');
     });
 
     searchForm?.addEventListener('submit', (event) => {
       event.preventDefault();
-      go({ ...state, q: input.value, page: 1 }, 'replace');
+      go({ ...state, q: input.value.trim(), page: 1 }, 'replace');
     });
 
     clearBtn?.addEventListener('click', () => go({ q: '', group: '', source: '', page: 1 }, 'push'));
@@ -313,7 +355,8 @@ const showEmpty = !!page && page.data.length === 0;
     });
 
     window.addEventListener('popstate', () => {
-      state = readNewsParams(location.search);
+      window.clearTimeout(debounceTimer);
+      state = reconcileNewsParams(readNewsParams(location.search), availableSources);
       syncControls(state);
       void load(state);
     });
